@@ -38,6 +38,8 @@ network:
     filepath: "${HOME}/.ncmctl/cookie.json"
     # cookie 刷盘间隔,如果间隔过大当程序崩溃或退出,可能导致cookie值不能刷到磁盘中.如果间隔过小,会导致频繁刷盘,影响性能.
     interval: 3s
+  # 全局自定义 User-Agent
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
 # 数据缓存配置
 database:
   # 缓存驱动,目前支持badger
