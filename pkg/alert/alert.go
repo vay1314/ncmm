@@ -27,8 +27,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/chaunsin/netease-cloud-music/pkg/alert/http"
-	"github.com/chaunsin/netease-cloud-music/pkg/alert/mail"
+	"github.com/3899/ncmm/pkg/alert/http"
+	"github.com/3899/ncmm/pkg/alert/mail"
 )
 
 type Config struct {

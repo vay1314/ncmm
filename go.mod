@@ -1,4 +1,4 @@
-module github.com/chaunsin/netease-cloud-music
+module github.com/3899/ncmm
 
 go 1.25.0
 

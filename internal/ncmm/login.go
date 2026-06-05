@@ -24,7 +24,7 @@
 package ncmm
 
 import (
-	"github.com/chaunsin/netease-cloud-music/pkg/log"
+	"github.com/3899/ncmm/pkg/log"
 
 	"github.com/spf13/cobra"
 )

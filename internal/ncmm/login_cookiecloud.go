@@ -31,10 +31,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chaunsin/netease-cloud-music/api"
-	"github.com/chaunsin/netease-cloud-music/api/weapi"
-	"github.com/chaunsin/netease-cloud-music/pkg/cookiecloud"
-	"github.com/chaunsin/netease-cloud-music/pkg/log"
+	"github.com/3899/ncmm/api"
+	"github.com/3899/ncmm/api/weapi"
+	"github.com/3899/ncmm/pkg/cookiecloud"
+	"github.com/3899/ncmm/pkg/log"
 
 	"github.com/spf13/cobra"
 )

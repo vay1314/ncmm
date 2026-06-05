@@ -1,6 +1,35 @@
+<a href="https://github.com/3899/ncmm">
+  <img src="https://socialify.git.ci/3899/ncmm/image?description=1&descriptionEditable=%E5%9F%BA%E4%BA%8E%20Go%20%E7%9A%84%E7%BD%91%E6%98%93%E4%BA%91%E9%9F%B3%E4%B9%90%E4%BA%BA%E5%8A%A9%E6%89%8B%EF%BC%9A%E4%B8%80%E9%94%AE%E7%AD%BE%E5%88%B0%E3%80%81%E8%87%AA%E5%8A%A8%E4%BB%BB%E5%8A%A1%E3%80%81%E6%8E%A5%E5%8A%9B%E5%88%B7%E6%92%AD&font=Source%20Code%20Pro&logo=https%3A%2F%2Fp6.music.126.net%2Fobj%2Fwo3DlcOGw6DClTvDisK1%2F62177614927%2F22ad%2F1953%2Fa6cf%2Fe7007953d5942445a0444ca346bd06be.png%3Fraw%3Dtrue&name=1&owner=1&pattern=Floating%20Cogs&theme=Auto" alt="ncmm" />
+</a>
+
+<div align="center">
+  <br/>
+
+  <div>
+    <a href="./LICENSE">
+      <img
+        src="https://img.shields.io/github/license/3899/ncmm?style=flat-square"
+      />
+    </a >
+    <a href="https://github.com/3899/ncmm/releases">
+      <img
+        src="https://img.shields.io/github/v/release/3899/ncmm?style=flat-square"
+      />
+    </a >
+    <a href="https://github.com/3899/ncmm/releases">
+      <img
+        src="https://img.shields.io/github/downloads/3899/ncmm/total?style=flat-square"
+      />  
+    </a >
+  </div>
+  
+</div>
+
 # 🎵 ncmm
 
-`ncmm` 是一个基于 Go 语言（Go 1.25.0+）开发的网易云音乐命令行工具。编译后生成的命令行工具为 `ncmm`，支持多种方式登录网易云音乐，并能对指定的歌曲 ID 列表进行模拟播放。
+`ncmm` 是一个专门为**网易云音乐人**设计的命令行助手工具，基于 Go 语言（Go 1.25.0+）开发。
+
+本项目旨在帮助网易云音乐人一键完成日常签到、自动执行黑胶 VIP 进阶任务（包括图文笔记自动发布与秒删、多粉丝号接力刷播放量等），帮助音乐人轻松获取并维持黑胶会员权益。工具严格遵循防风控设计，支持多账号安全隔离、播放量分摊回退、日推歌曲混听干扰以及本人播放拦截等安全策略。
 
 ---
 
@@ -8,9 +37,13 @@
 
 1. **🔑 账号登录管理 (`ncmm login`)**
    - **扫码登录 (`qrcode`)**：在终端命令行直接渲染并打印二维码字符，同时在本地生成二维码图片，用户使用手机网易云音乐 APP 扫码即可快捷登录。
-   - **手机号登录 (`phone`)**：支持使用短信验证码（发送验证码并在终端交互输入）或账号密码进行登录。
+   - ~~**手机号登录 (`phone`)**：支持使用短信验证码（发送验证码并在终端交互输入）或账号密码进行登录。~~ **(⚠️ 存在风控，不建议使用)**
    - **Cookie 导入 (`cookie`)**：支持从文本或文件导入 Cookie。具备对 JSON 数组格式、Netscape 文本格式以及传统 HTTP Header 格式 Cookie 的自动识别和解析能力。
    - **CookieCloud 同步 (`cookiecloud`)**：通过配置 CookieCloud 的服务器地址、UUID 和密码，自动拉取并过滤同步网易云音乐的 Cookie。
+
+> [!WARNING]
+> **关于登录风控的重要提示**
+> 网易云音乐对非官方 IP/客户端的手机验证码和密码登录限制极其严苛，在非官方客户端登录极易高频触发图形滑块验证，甚至导致账号被保护性限制。**强烈推荐使用 Cookie 导入/同步 (cookie/cookiecloud)，以此保障账号安全与程序稳定。**
 
 2. **🎵 模拟歌曲播放 (`ncmm playids`)**
    - 针对指定的 `songId` 歌曲池（支持命令行参数直接传入，或从外部文本文件批量读取），通过接口请求与时延等待来模拟播放：
@@ -26,6 +59,25 @@
    - **限额自增与达标退出**：每播放成功一首，本地已播计数自增；当今日播放数量达到随机目标上限时，程序将自动跳过并退出，防止每日播放次数恒定。
    - **单次运行目标**：支持通过 `[run_min, run_max]` 参数设定单次运行的播放歌曲数。
 
+4. **📅 每日任务签到一键闭环 (`ncmm sign`)**
+   - 一键完成多种日常签到与豆贝领取：
+     - **音乐人签到**：自动调用音乐人中心签到接口。
+     - **领取云豆**：自动查询已完成的音乐人任务，并一键领取对应的云豆奖励。
+     - **云贝签到**：自动执行云贝中心每日签到，若配置开启了额外任务的自动领取，也将一键领取。
+     - **VIP 签到**：自动查询黑胶 VIP 会员状态并完成每日乐签，一键领取可领的成长值。
+
+5. **🎖️ 音乐人黑胶会员进阶任务 (`ncmm musician-vip`)**
+   - 自动查询进阶任务进度，按需执行并加速任务达标：
+     - **图文笔记发布**：若笔记发布天数未达标，自动从配置的图片链接池中下载外网图片，上传至云端并随机选择一条文案发布图文动态。
+     - **播放量达标任务**：若播放次数未达标，自动调用本地 `playids` 的真实模拟播放与上报逻辑。播放过程严格遵守防风控的随机每日上限机制，降低封号风险。
+     - **多账号隔离**：支持配置独立的 `fan1.json` 作为进阶任务刷歌账号的 Cookie，确保主账号（音乐人账号）与辅助账号的安全隔离。
+
+6. **📁 灵活的 `--home` 多账号工作目录机制**
+   - 支持通过全局参数 `--home` 指定运行目录，自适应实现配置、Cookie、数据库、日志等多账号隔离：
+     - **自动加载配置**：未指定 `-c` / `--config` 时，若 `--home` 目录中存在 `config.yaml`，将自动加载它。
+     - **独立会话隔离**：每个工作目录拥有独立的 `cookie.json`、Badger 数据库和日志文件，互不干扰。
+     - **登录路径自适应**：在 `ncmm login cookie -o <文件名>` 导出 Cookie 时，若输出路径为相对路径，将自动基于 `--home` 目录进行拼装，极大简化了多账号脚本的管理。
+
 ---
 
 ## ⚙️ 配置文件说明 (`config.yaml`)
@@ -35,6 +87,15 @@
 ```yaml
 # 配置文件版本
 version: 1.0
+
+# 顶级多账号管理
+accounts:
+  # 音乐人主账号 Cookie 文件路径
+  primary: "${HOME}/.ncmm/cookie.json"
+  # 辅助刷量账号 Cookie 列表
+  secondary:
+    - "${HOME}/.ncmm/fan1.json"
+    - "${HOME}/.ncmm/fan2.json"
 
 # log 日志模块配置
 log:
@@ -69,12 +130,6 @@ network:
   timeout: 60s
   # 网络请求失败重试次数
   retry: 3
-  # cookie 配置用于保存登录相关信息
-  cookie:
-    # cookie 存储文件路径，登录成功后会将 cookie 序列化至该文件
-    filepath: "${HOME}/.ncmm/cookie.json"
-    # cookie 刷盘检测间隔
-    interval: 3s
   # 全局自定义 User-Agent
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
 
@@ -85,7 +140,7 @@ database:
   # 缓存目录路径
   path: "${HOME}/.ncmm/database/badger/"
 
-# playids 播放指定歌曲配置
+# playids 播放指定歌曲配置 (原生独立播放)
 playids:
   # 每日播放目标随机下限 (每天首次启动时在此范围内随机生成当日目标)
   daily_min: 50
@@ -99,6 +154,58 @@ playids:
   gap_min: 10
   # 歌曲与歌曲之间的静默间隔最大值 (单位: 秒)
   gap_max: 30
+  # 默认歌曲 ID 列表（逗号分隔的字符串，与命令行 ids 采用并集去重合并）
+  ids: ""
+  # 默认歌曲 ID 文件路径（与命令行 ids-file 采用并集去重合并；支持本地路径或 http/https 远程链接）
+  idsFile: ""
+  # 独立播放账号控制（命令行参数未指定 --cookie-file 时生效）
+  enablePrimary: false      # 默认不启用主账号刷歌
+  enableSecondaries: true   # 启用所有辅助账号刷歌
+
+# 签到任务配置
+sign:
+  enablePrimary: true       # 启用主账号日常签到
+  enableSecondaries: true   # 启用所有辅助账号日常签到（增加其账号活跃度防风控）
+
+# 模拟播放日推干扰配置
+mixPlay:
+  enabled: true             # 是否在模拟播放中掺杂日推歌曲作为干扰
+  dailyRecommendRatio: 0.3  # 日推混听干扰占比 (如 0.3 表示 30% 日推)
+  countTarget: false        # 混听的日推歌曲是否计入播放目标（若为 false，则每日/单次目标仅统计主歌，日推只起风控干扰作用，不占任务额度；若为 true，则日推也算在目标数内）
+
+# 音乐人黑胶会员进阶任务配置
+musicianVip:
+  # 笔记发布任务配置
+  note:
+    # 笔记文字内容。每次发布时会从中随机选择一条发布（若有 messagesFile 则会进行并集合并）
+    messages:
+      - "分享一首好听的歌~"
+      - "音乐是最好的陪伴"
+      - "今天也要好好听歌呀"
+      - "用音乐记录生活"
+    # 动态发布文本列表文件路径 (支持本地路径与远程 http/https 链接，会与 messages 并集合并)
+    messagesFile: "https://raw.giteeusercontent.com/v2599/configuration/raw/main/ncmm/note.txt"
+    # 图片 URL 链接池。每次发布时会从中随机挑选一个 URL 进行下载并上传
+    imageUrls:
+      - "https://picsum.photos/800/600"
+    # 动态类型: 35=普通动态, 39=图文笔记
+    type: 39
+    # 是否在笔记发布成功后自动删除（秒删），以保持个人主页整洁。默认开启
+    autoDelete: true
+  # 播放任务配置 (专门用于进阶任务的接力刷歌)
+  play:
+    # 进阶任务专属覆盖的歌曲 ID（留空继承 playids.ids，支持并集去重合并）
+    ids: ""
+    # 进阶任务专属覆盖的歌曲 ID 文件路径（留空继承 playids.idsFile，支持并集去重合并）
+    idsFile: ""
+    # 进阶任务单次运行的播放歌曲随机目标下限 (为 0 则继承 playids.run_min)
+    run_min: 0
+    # 进阶任务单次运行的播放歌曲随机目标上限 (为 0 则继承 playids.run_max)
+    run_max: 0
+    # 两首歌曲之间的最小随机等待间隔（秒，为 0 则继承 playids.gap_min）
+    gap_min: 0
+    # 两首歌曲之间的最大随机等待间隔（秒，为 0 则继承 playids.gap_max）
+    gap_max: 0
 ```
 
 ---
@@ -119,8 +226,8 @@ go build -o ncmm.exe main.go
 
 `ncmm` 命令支持以下全局通用参数，可以跟在主命令或任意子命令后：
 
-- `-c` / `--config` (String)：指定配置文件 `config.yaml` 的路径。若不指定，默认加载 `${HOME}/.ncmm/config.yaml`；若该文件不存在，则会使用程序内置的默认配置值。
-- `--home` (String)：指定数据存储的家目录。默认值为当前用户的系统家目录（`${HOME}`）。该家目录将用于存放运行日志（`log/`）、Cookie 状态文件（`cookie.json`）以及本地 Badger 数据库（`database/`）。
+- `-c` / `--config` (String)：指定配置文件 `config.yaml` 的路径。若未指定，且配置了 `--home`，程序将自动尝试加载 `--home` 目录下的 `config.yaml`；若仍未找到，默认尝试加载 `${HOME}/.ncmm/config.yaml`；若该文件不存在，则会使用程序内置的默认配置值。
+- `--home` (String)：指定数据存储的家目录。默认值为当前用户的系统家目录（`${HOME}`）。该家目录将用于存放运行日志（`log/`）、Cookie 状态文件（`cookie.json`）以及本地 Badger 数据库（`database/`）。通过配合不同 `--home` 路径，可以极简、安全地实现多账号数据物理隔离。
 - `--debug` (Boolean)：开启命令行调试模式。开启后，日志会强制输出到标准输出（Stdout），日志级别临时设为 `debug`，并输出底层的网络请求调试信息。
 
 ---
@@ -139,7 +246,7 @@ ncmm login qrcode -t 5m -d ./
 - `-d` / `--dir` (String): 保存临时二维码图片 `qrcode.png` 的目录路径，默认当前工作目录。登录成功或超时后该文件会自动清理。
 - `-l` / `--level` (Int): 二维码纠错等级（`0` -> 7%, `1` -> 15% 默认, `2` -> 25%, `3` -> 30%）。
 
-#### 手机号登录 (`phone`)
+#### ~~手机号登录 (`phone`)~~ (⚠️ 存在高风控拦截风险，不推荐)
 ```bash
 # 短信验证码登录 (不指定密码时会自动发送验证码，并在控制台交互提示输入验证码)
 ncmm login phone 188xxxx8888
@@ -152,15 +259,28 @@ ncmm login phone 188xxxx8888 -p "YourPassword"
 - `-t` / `--timeout` (Duration): 登录操作的超时时间，默认 `10m` (10分钟)。
 
 #### Cookie 直接导入 (`cookie`)
-支持自动识别 Header 字符串、JSON 数组、Netscape 文件等多种 Cookie 格式：
+支持自动识别 Header 字符串、JSON 数组、Netscape 文件等多种 Cookie 格式，并可将解析出的标准化 JSON 格式 Cookie 写入到指定输出 file：
 ```bash
-# 导入 Cookie 字符串
+# 1. 导入 Cookie 字符串并默认保存至 cookie.json (对应主账号)
 ncmm login cookie 'MUSIC_U=xxxx; __csrf=yyyy;'
 
-# 从外部 Cookie 文本文件导入
+# 2. 从外部 Cookie 文本文件导入（不指定 -o 时，系统会自动保存为 cookie.json）
 ncmm login cookie -f ./cookie.txt
+
+# 3. 导入辅助账号 Cookie 文件（不指定 -o，系统会根据输入文件名自动另存为 fan1.json）
+ncmm login cookie -f ./fan1.txt
+
+# 4. 手动指定输出的 Cookie 文件名（例如将本地的 my_fan.txt 导入为配置文件中声明的 fan1.json）
+ncmm login cookie -f ./my_fan.txt -o fan1.json
+
+# 5. 配合 --home 指定工作目录导入辅助账号（以下命令会自动将 fan1.txt 解析并保存到 run/ 文件夹下的 fan1.json 中）
+ncmm --home run login cookie -f ./fan1.txt
 ```
-- `-f` / `--file` (String): 存放 Cookie 的文件路径。如果指定此参数，将从该文件中读取 Cookie。
+- `-f` / `--file` (String): 存放 Cookie 的输入文件路径。如果指定此参数，将从该文件中读取 Cookie。
+- `-o` / `--output` (String): 保存解析后的 JSON Cookie 文件名。
+  - **自动保存（无需手动指定 `-o`）**：如果您使用了 `-f ./fan1.txt` 导入，系统会自动为您另存为 `fan1.json`。如果什么文件都没传（例如从命令行直接导入），默认保存为 `cookie.json`（对应主账号）。
+  - **手动保存**：如果您想给导入的 Cookie 起个别名，也可以用 `-o` 强行指定文件名（例如 `-o fan2.json`）。
+  - **存放目录**：如果您填写的是相对路径（如 `fan1.json`），系统会自动将它保存到您通过 `--home` 参数指定的运行工作目录下，无需担心它生成到其他地方。
 - `--format` (String): 手动指定导入 Cookie 文件的格式（支持 `json`、`netscape` 或 `header`），不指定则程序会自动探测并尝试三种格式。
 
 #### CookieCloud 同步 (`cookiecloud`)
@@ -177,6 +297,8 @@ ncmm login cookiecloud -u <UUID> -p <密码> -s <服务器地址>
 
 ### 2. 模拟播放 (`ncmm playids`)
 
+该命令用于模拟播放指定歌曲列表。
+
 ```bash
 ncmm playids --ids <songId列表> [--ids-file <文件>] [--num <播放数量>] [--gap-min <秒>] [--gap-max <秒>] [--daily-min <下限>] [--daily-max <上限>]
 ```
@@ -186,7 +308,7 @@ ncmm playids --ids <songId列表> [--ids-file <文件>] [--num <播放数量>] [
 | 参数/Flag | 说明 | 默认值 |
 | :--- | :--- | :--- |
 | `--ids` | 逗号分隔的歌曲 ID 列表 | 空 |
-| `--ids-file` | 从文本文件读取歌曲 ID 列表（每行一个 ID，支持 `#` 注释） | 空 |
+| `--ids-file` | 从文本文件或远程网络 URL 读取歌曲 ID 列表（每行一个 ID，支持 `#` 注释，支持本地路径及 `http://`/`https://` 远程链接） | 空 |
 | `--num` | 本次运行最大播放的歌曲数量（`0` 表示播到今日目标上限为止） | `0` |
 | `--gap-min` | 歌曲切换之间的最小随机等待间隔（秒） | 配置项 `gap_min` / `10` |
 | `--gap-max` | 歌曲切换之间的最大随机等待间隔（秒） | 配置项 `gap_max` / `30` |
@@ -197,14 +319,17 @@ ncmm playids --ids <songId列表> [--ids-file <文件>] [--num <播放数量>] [
 
 #### 💡 使用示例
 ```bash
-# 播放指定的多个歌曲 ID
+# 1. 播放指定的多个歌曲 ID（在默认系统家目录下的 .ncmm 工作区运行）
 ncmm playids --ids 3373818852,3373845775
 
-# 从歌曲 ID 列表文件读取并播放
+# 2. 从歌曲 ID 列表文件读取并播放
 ncmm playids --ids-file ./songs.txt
 
-# 调试播放：只播放 1 首，且无等待间隔
+# 3. 调试播放：只播放 1 首，且无等待间隔
 ncmm playids --ids 3373818852 --num 1 --gap-min 0 --gap-max 0
+
+# 4. 配合 --home 在指定的隔离工作目录下运行播放任务（自动加载 run/config.yaml 并在该目录下轮询辅助账号进行播放）
+ncmm --home run playids --ids 3373818852,3373845775
 ```
 
 `songs.txt` 文件示例：
@@ -213,6 +338,166 @@ ncmm playids --ids 3373818852 --num 1 --gap-min 0 --gap-max 0
 3373818852
 3373845775
 ```
+
+---
+
+### 3. 每日任务签到 (`ncmm sign`)
+
+该命令用于一键执行每日的多项任务签到，包含：音乐人签到、云豆领取、云贝签到、VIP 乐签及成长值领取。
+
+```bash
+# 1. 在默认系统家目录工作区执行日常一键签到
+ncmm sign
+
+# 2. 配合 --home 在指定的隔离工作目录下执行日常一键签到（自动加载 run/config.yaml 轮询该目录下的所有账号）
+ncmm --home run sign
+```
+
+#### 💡 运行流程
+1. **音乐人签到**：自动调用 `/api/creator/user/access` 完成音乐人中心签到。
+2. **领取云豆**：自动拉取当前的音乐人任务列表（`/api/nmusician/workbench/mission/cycle/list`），对于所有“已完成未领取”状态的任务，批量调用 `/api/nmusician/workbench/mission/reward/obtain/new` 领取对应的云豆奖励。
+3. **云贝签到**：自动执行云贝中心每日签到。
+4. **VIP 乐签及成长值**：查询账号的黑胶会员状态。若是 VIP 会员，则自动进行每日黑胶乐签，并一键领取当前可领取的成长值奖励。
+
+#### 💡 运行日志示例
+```text
+[sign] >>>>>> 开始主账号签到 (run/cookie.json) <<<<<<
+  [当前账号信息] Uid: 1024****01 | 等级: 黑胶·伍 (Lv.5)
+  --- 音乐人任务 ---
+  ✅ 音乐人签到成功
+  --- 云豆任务 ---
+  ✅ 云豆领取成功: 任务="每日听歌15分钟", 奖励=20云豆
+  --- 云贝任务 ---
+  ✅ 云贝签到成功
+  --- VIP签到 ---
+  ✅ VIP乐签成功, 获得经验=10
+[sign] >>>>>> 开始辅助账号签到 (run/fan1.json) <<<<<<
+  [当前账号信息] Uid: 1024****02 | 等级: 黑胶·壹 (Lv.1)
+  --- 音乐人任务 ---
+  ✅ 音乐人签到成功
+  --- 云贝任务 ---
+  ✅ 云贝签到成功
+[sign] >>>>>> 开始辅助账号签到 (run/fan2.json) <<<<<<
+  [当前账号信息] Uid: 1024****03 | 等级: 黑胶·壹 (Lv.1)
+  --- 音乐人任务 ---
+  ✅ 音乐人签到成功
+  --- 云贝任务 ---
+  ✅ 云贝签到成功
+```
+
+---
+
+### 4. 音乐人黑胶会员进阶任务 (`ncmm musician-vip`)
+
+该命令用于自动化完成网易云音乐人黑胶会员的“进阶任务”（`musician-vip`），从而保持或获取黑胶会员权益。
+
+```bash
+# 1. 在默认系统家目录工作区执行日常黑胶进阶任务
+ncmm musician-vip
+
+# 2. 配合 --home 在指定的隔离工作目录下执行日常黑胶进阶任务（自动加载 run/config.yaml 读取辅助账号接力刷播）
+ncmm --home run musician-vip
+```
+
+#### 💡 运行流程与原理
+1. **检测音乐人状态**：拉取进阶任务列表 `/api/nmusician/workbench/special/right/vip/info` 获得当前进度。
+2. **图文笔记发布任务**：若进阶任务中“发布图文动态”天数未达标，程序会自动：
+   - 从 `config.yaml` 配置文件中的 `imageUrls` 中随机挑选一个外网图片地址并将其下载。
+   - 上传图片资源（`/api/nos/token/alloc` 和 CDN 上传）。
+   - 随机选择一条 `messages` 配置文字，发布图文笔记（`/api/event/publish`）。
+   - 笔记发布成功后，程序会在 10 秒后自动删除该动态（`/api/event/delete`），保持个人主页的整洁。
+3. **有效播放次数任务**：若进阶任务中“有效播放次数”未达标，程序将自动调用本地播放逻辑：
+   - **多辅助号接力刷播**：程序会自动从配置的 `accounts.secondary` 辅助号池中依次读取 Cookie 文件。主账号用于查询任务状态，辅助号池用于执行播放任务。
+   - **自动额度分摊与上限回退**：若某个辅助号在播放过程中触发了本地今日随机上限，程序会自动计算该账号已贡献的有效主歌播放量，将剩余未完成的播放额度回退，并自动重新分配给下一个可用的辅助账号（例如从 `fan1.json` 自动转移接力到 `fan2.json`）继续完成，实现全自动化接力，直至任务完全达标或所有辅助号均达上限。
+   - **混听风控与本人过滤**：在每个账号刷歌时，支持掺杂网易云每日推荐歌曲（占比 30% 可配）。**程序会在任务启动时自动拉取一次日推列表（通常 30 首）并缓存在内存中，在每一轮（Round）播放开始前重新随机抽选对应占比的日推 ID 并与主歌洗牌打乱，既完美模拟了真实用户在列表中随机挑选播放的行为，又避免了频繁拉取接口触发反作弊系统**。并且程序会自动拦截歌手/DJ本人歌曲的播放，如果发现播放歌池中含有当前听歌账号本人的作品，会自动跳过，避免无效自刷被平台惩罚。
+
+#### 💡 多辅助号接力刷播运行日志示例
+
+以下为 `ncmm musician-vip` 运行时的真实多账号接力日志（敏感的 UID、数字和昵称已脱敏混淆）：
+
+```text
+[musician-vip] 处理播放任务...
+[musician-vip] 当前进度: 120/200, 今日尚缺有效播放: 80 次
+[musician-vip] >>>>>> 分摊任务开始: 选用账号 (run/fan1.json), 本次需刷总数(含日推): 30 首, 尚缺主歌有效数: 80 次 <<<<<<
+[2026-06-04 16:30:00] [playids] 当前账号：uid=1024****68 昵称="粉丝一号"
+[2026-06-04 16:30:00] [playids] 今日风控目标: 已完成=50首, 今日随机上限=80首
+[2026-06-04 16:30:00] [playids] 正在调用接口获取歌曲详情...
+[2026-06-04 16:30:01] [playids] 启用混听干扰风控：自动拉取辅助账号每日推荐...
+[2026-06-04 16:30:02] [playids] 混听风控设置：成功获取到 30 首可用日推，每轮将随机选出 9 首掺杂播放
+[2026-06-04 16:30:02] [playids] 播放任务启动：本次目标刷播=30首, 今日已播累计=50首, 今日随机上限=80首
+[2026-06-04 16:30:02] [playids] ====== 开始第 1 轮播放 (本轮共 30 首) ======
+[2026-06-04 16:30:02] [playids] 正在播放：第1/30首，第1轮第1首，songId=1934****66, 歌名="歌曲A", 时长=4m10s
+[2026-06-04 16:30:02] [playids] 开始拉取资源：songId=1934****66
+[2026-06-04 16:30:05] [playids] 拉取完成：songId=1934****66, 来源=CDN, 已耗时=3.25s, 补等待=4m10s
+[2026-06-04 16:30:05] [playids] 播放进度: 0s/4m10s (0%) ...
+...
+[2026-06-04 16:34:15] [playids] 播放进度: 4m10s/4m10s (100%) [====================]
+[2026-06-04 16:34:15] [playids] 播放上报成功：songId=1934****66, 上报时长=250s
+[2026-06-04 16:34:15] [playids] 本首结果：第1/30首，成功，songId=1934****66, 歌名="歌曲A"
+...
+[2026-06-04 16:45:10] [playids] 播放上报成功：songId=3381****72, 上报时长=120s
+[2026-06-04 16:45:10] [playids] ⚠️ 触发今日风控随机播放总上限 (80首)，优雅退出当前运行
+[2026-06-04 16:45:10] [playids] 本次实际运行总上报数: 30，成功: 30
+[musician-vip] 账号 (run/fan1.json) 播放完成，实际贡献主歌有效上报数: 21 次
+[musician-vip] >>>>>> 分摊任务开始: 选用账号 (run/fan2.json), 本次需刷总数(含日推): 50 首, 尚缺主歌有效数: 59 次 <<<<<<
+[2026-06-04 16:45:11] [playids] 当前账号：uid=1024****69 昵称="粉丝二号"
+[2026-06-04 16:45:11] [playids] 今日风控目标: 已完成=0首, 今日随机上限=120首
+[2026-06-04 16:45:11] [playids] 正在调用接口获取歌曲详情...
+[2026-06-04 16:45:12] [playids] 启用混听干扰风控：自动拉取辅助账号每日推荐...
+[2026-06-04 16:45:13] [playids] 混听风控设置：成功获取到 30 首可用日推，每轮将随机选出 15 首掺杂播放
+[2026-06-04 16:45:13] [playids] 播放任务启动：本次目标刷播=50首, 今日已播累计=0首, 今日随机上限=120首
+[2026-06-04 16:45:13] [playids] ====== 开始第 1 轮播放 (本轮共 50 首) ======
+...
+[musician-vip] ✅ 经过多个辅助账号的接力刷歌，主账号的播放任务已圆满达标！
+```
+
+---
+
+### 5. 多账号运行目录最佳实践 (`--home`)
+
+在多账号运作或需要使用多个辅助号为自己（音乐人主账号）刷播放量的场景下，推荐使用 `--home` 构建如下目录结构：
+
+```text
+run/
+├── config.yaml       # 多账号公共/专用配置文件（配置了顶级 accounts 以及 sign/mixPlay）
+├── cookie.json       # 主账号 cookie（网易云音乐人主号，由 login cookie 生成）
+├── fan1.json         # 辅助账号 1 cookie（用于帮主账号刷播放量，隔离存储）
+├── fan2.json         # 辅助账号 2 cookie（用于接力帮主账号刷播放量，隔离存储）
+├── database/         # Badger 数据库存放目录（按账号 UID 隔离数据，无冲突风险）
+└── log/
+    └── ncm.log       # 运行日志
+```
+
+#### 💡 多账号实战操作示例：
+
+1. **第一步：创建工作目录并放入配置文件**
+   在本地建立文件夹 `run/`，并将模板 `config.yaml` 复制进去，根据需要配置顶级的 `accounts` 节点，加入主账号和各辅助账号的文件路径。
+
+2. **第二步：导入/登录主账号**
+   主账号为网易云音乐人账号，登录结果会默认输出至 `run/cookie.json`：
+   ```bash
+   # 以扫码形式登录主账号
+   ncmm --home run login qrcode
+   
+   # 或使用 Cookie 导入主账号
+   ncmm --home run login cookie 'MUSIC_U=xxxx...'
+   ```
+
+3. **第三步：导入/登录各辅助账号**
+   辅助账号为刷播账号。我们使用 `-o` 参数分别将 Cookie 输出重定向为 `fan1.json`、`fan2.json` ... （输入文件可以是外部导出的 Cookie 文本，且 `-o` 使用相对路径时将自适应基于 `--home` 目录）：
+   ```bash
+   ncmm --home run login cookie -f run/fan1.txt -o fan1.json
+   ncmm --home run login cookie -f run/fan2.txt -o fan2.json
+   ```
+
+4. **第四步：一键运行签到与黑胶进阶任务**
+   ```bash
+   # 执行日常一键签到（会根据 sign 配置自动对主账号及所有辅助账号轮询签到）
+   ncmm --home run sign
+   
+   # 执行黑胶会员进阶任务（会自动读取 accounts.secondary 下的全部辅助账号，为首选主账号接力分摊播放量）
+   ncmm --home run musician-vip
+   ```
 
 ---
 

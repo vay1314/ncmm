@@ -26,7 +26,7 @@ package eapi
 import (
 	"context"
 
-	"github.com/chaunsin/netease-cloud-music/api/types"
+	"github.com/3899/ncmm/api/types"
 )
 
 type CaptchaSendReq struct {

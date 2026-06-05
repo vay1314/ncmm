@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chaunsin/netease-cloud-music/pkg/ncm"
+	"github.com/3899/ncmm/pkg/ncm"
 )
 
 const (

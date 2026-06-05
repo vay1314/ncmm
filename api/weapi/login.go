@@ -28,10 +28,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/chaunsin/netease-cloud-music/api"
-	"github.com/chaunsin/netease-cloud-music/api/types"
-	"github.com/chaunsin/netease-cloud-music/pkg/crypto"
-	"github.com/chaunsin/netease-cloud-music/pkg/utils"
+	"github.com/3899/ncmm/api"
+	"github.com/3899/ncmm/api/types"
+	"github.com/3899/ncmm/pkg/crypto"
+	"github.com/3899/ncmm/pkg/utils"
 
 	"github.com/skip2/go-qrcode"
 )

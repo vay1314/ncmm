@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/chaunsin/netease-cloud-music/internal/ncmm"
+	"github.com/3899/ncmm/internal/ncmm"
 )
 
 var (

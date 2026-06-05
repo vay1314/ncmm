@@ -25,16 +25,20 @@ package ncmm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/chaunsin/netease-cloud-music/api"
-	"github.com/chaunsin/netease-cloud-music/api/weapi"
-	"github.com/chaunsin/netease-cloud-music/pkg/log"
-	"github.com/chaunsin/netease-cloud-music/pkg/utils"
+	"github.com/3899/ncmm/api"
+	"github.com/3899/ncmm/api/weapi"
+	"github.com/3899/ncmm/config"
+	"github.com/3899/ncmm/pkg/log"
+	"github.com/3899/ncmm/pkg/utils"
 
 	"codeberg.org/sbinet/mozcookie"
 	"github.com/spf13/cobra"
@@ -107,12 +111,13 @@ Automatically attempt json, header, and netscape.
 `
 
 type loginCookieCmd struct {
-	root *Login
-	cmd  *cobra.Command
-	l    *log.Logger
+	root   *Login
+	cmd    *cobra.Command
+	l      *log.Logger
 
 	File   string
 	format string
+	Output string
 }
 
 func cookie(root *Login, l *log.Logger) *cobra.Command {
@@ -136,6 +141,7 @@ func cookie(root *Login, l *log.Logger) *cobra.Command {
 func (c *loginCookieCmd) addFlags() {
 	c.cmd.Flags().StringVarP(&c.File, "file", "f", "", "import cookie file")
 	c.cmd.Flags().StringVar(&c.format, "format", "", "import cookie file format. eg: ''、json、netscaple、header")
+	c.cmd.Flags().StringVarP(&c.Output, "output", "o", "", "output cookie file path (default: config network.cookie.filepath)")
 }
 
 func (c *loginCookieCmd) execute(ctx context.Context, args []string) error {
@@ -189,34 +195,11 @@ func (c *loginCookieCmd) execute(ctx context.Context, args []string) error {
 			cookies = ck
 		default:
 			// 走探测逻辑
-			ck, err := mozcookie.Read(c.File)
+			ck, err := parseCookieFile(c.File)
 			if err != nil {
-				log.Debug("retry read netscape err: %s", err)
+				return fmt.Errorf("parseCookieFile: %w", err)
 			}
 			cookies = ck
-			if len(cookies) <= 0 {
-				f, err := os.Open(c.File)
-				if err != nil {
-					return fmt.Errorf("open: %w", err)
-				}
-				defer f.Close()
-
-				cookies, err = ParseCookeJson(f)
-				if err != nil {
-					log.Debug("retry parse json err: %s", err)
-				}
-			}
-			if len(cookies) <= 0 {
-				data, err := os.ReadFile(c.File)
-				if err != nil {
-					return fmt.Errorf("open: %w", err)
-				}
-
-				cookies, err = http.ParseCookie(string(data))
-				if err != nil {
-					return fmt.Errorf("ParseCookie: %w", err)
-				}
-			}
 		}
 	} else {
 		var binary = strings.NewReader(content)
@@ -281,7 +264,39 @@ func (c *loginCookieCmd) execute(ctx context.Context, args []string) error {
 		return fmt.Errorf("failed to parse domain URL: %v", err)
 	}
 
-	cli, err := api.NewClient(c.root.root.Cfg.Network, c.l)
+	// 如果指定了输入文件 -f，且没有指定输出 -o，自动推导输出文件名为：输入文件名(不含后缀) + .json
+	if c.File != "" && c.Output == "" {
+		base := filepath.Base(c.File)
+		ext := filepath.Ext(base)
+		nameWithoutExt := strings.TrimSuffix(base, ext)
+		c.Output = nameWithoutExt + ".json"
+	}
+
+	// 如果指定了输出路径，临时切换 cookie 文件路径
+	networkCfg := c.root.root.Cfg.Network
+	if c.Output != "" {
+		outputPath := c.Output
+		if !filepath.IsAbs(outputPath) {
+			// 获取指定的 home 目录进行拼接
+			home := c.root.root.Opts.Home
+			if home == "" {
+				home = config.HomeDir
+			}
+			home = filepath.Clean(home)
+			// 如果没有传特定的工作目录（即使用默认的用户家目录），则收归在隐藏的 .ncmm 文件夹内保存
+			if home == filepath.Clean(config.HomeDir) {
+				home = filepath.Join(home, ".ncmm")
+			}
+			outputPath = filepath.Join(home, outputPath)
+		}
+		// 复制配置，修改 cookie filepath 指向指定文件
+		networkCfgCopy := *networkCfg
+		networkCfgCopy.Cookie.Filepath = outputPath
+		networkCfg = &networkCfgCopy
+		log.Debug("login cookie output: %s", outputPath)
+	}
+
+	cli, err := api.NewClient(networkCfg, c.l)
 	if err != nil {
 		return fmt.Errorf("NewClient: %w", err)
 	}
@@ -295,6 +310,115 @@ func (c *loginCookieCmd) execute(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("GetUserInfo: %s", err)
 	}
-	c.cmd.Printf("login success: %+v\n", user)
+	c.cmd.Printf("login success: uid=%d nickname=%s\n", user.Account.Id, user.Profile.Nickname)
 	return nil
+}
+
+// parseCookieFile 自动探测格式解析 cookie 文件（Netscape / JSON / RestyJar / Header）
+func parseCookieFile(path string) ([]*http.Cookie, error) {
+	// 尝试 Netscape 格式（mozcookie）
+	cookies, err := mozcookie.Read(path)
+	if err == nil && len(cookies) > 0 {
+		return cookies, nil
+	}
+	log.Debug("parseCookieFile netscape err: %v", err)
+
+	// 读取文件内容用于后续尝试
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+
+	// 尝试 JSON 数组格式
+	f, err := os.Open(path)
+	if err == nil {
+		cookies, err = ParseCookeJson(f)
+		f.Close()
+		if err == nil && len(cookies) > 0 {
+			return cookies, nil
+		}
+		log.Debug("parseCookieFile json array err: %v", err)
+	}
+
+	// 尝试 Resty cookie jar 格式
+	cookies, err = parseRestyCookieJar(data)
+	if err == nil && len(cookies) > 0 {
+		return cookies, nil
+	}
+	log.Debug("parseCookieFile resty jar err: %v", err)
+
+	// 尝试 Header 格式
+	cookies, err = http.ParseCookie(string(data))
+	if err == nil && len(cookies) > 0 {
+		return cookies, nil
+	}
+	log.Debug("parseCookieFile http.ParseCookie err: %v", err)
+
+	// fallback: 宽容模式手动解析
+	cookies = parseCookieStringFallback(string(data))
+	if len(cookies) > 0 {
+		return cookies, nil
+	}
+
+	return nil, fmt.Errorf("无法解析cookie文件: %s", path)
+}
+
+type restyCookieEntry struct {
+	Name     string `json:"Name"`
+	Value    string `json:"Value"`
+	Domain   string `json:"Domain"`
+	Path     string `json:"Path"`
+	Secure   bool   `json:"Secure"`
+	HttpOnly bool   `json:"HttpOnly"`
+	Expires  string `json:"Expires"`
+}
+
+func parseRestyCookieJar(data []byte) ([]*http.Cookie, error) {
+	var raw map[string]map[string]restyCookieEntry
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("not resty jar format: %w", err)
+	}
+
+	var cookies []*http.Cookie
+	for _, entries := range raw {
+		for _, entry := range entries {
+			c := &http.Cookie{
+				Name:     entry.Name,
+				Value:    entry.Value,
+				Domain:   entry.Domain,
+				Path:     entry.Path,
+				Secure:   entry.Secure,
+				HttpOnly: entry.HttpOnly,
+			}
+			if entry.Expires != "" && entry.Expires != "0001-01-01T00:00:00Z" {
+				if t, err := time.Parse(time.RFC3339, entry.Expires); err == nil {
+					c.Expires = t
+				}
+			}
+			cookies = append(cookies, c)
+		}
+	}
+	if len(cookies) == 0 {
+		return nil, fmt.Errorf("no cookies found in resty jar")
+	}
+	return cookies, nil
+}
+
+func parseCookieStringFallback(s string) []*http.Cookie {
+	var cookies []*http.Cookie
+	for _, part := range strings.Split(s, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		cookies = append(cookies, &http.Cookie{
+			Name:  strings.TrimSpace(kv[0]),
+			Value: strings.TrimSpace(kv[1]),
+		})
+	}
+	return cookies
 }

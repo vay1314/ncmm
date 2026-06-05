@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chaunsin/netease-cloud-music/pkg/database/badger"
+	"github.com/3899/ncmm/pkg/database/badger"
 )
 
 type Database interface {

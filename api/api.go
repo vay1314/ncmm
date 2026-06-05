@@ -37,9 +37,9 @@ import (
 	neturl "net/url"
 	"time"
 
-	"github.com/chaunsin/netease-cloud-music/pkg/cookie"
-	"github.com/chaunsin/netease-cloud-music/pkg/crypto"
-	"github.com/chaunsin/netease-cloud-music/pkg/log"
+	"github.com/3899/ncmm/pkg/cookie"
+	"github.com/3899/ncmm/pkg/crypto"
+	"github.com/3899/ncmm/pkg/log"
 
 	"github.com/andybalholm/brotli"
 	"github.com/cheggaaa/pb/v3"

@@ -29,9 +29,9 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/chaunsin/netease-cloud-music/config"
-	"github.com/chaunsin/netease-cloud-music/pkg/log"
-	"github.com/chaunsin/netease-cloud-music/pkg/utils"
+	"github.com/3899/ncmm/config"
+	"github.com/3899/ncmm/pkg/log"
+	"github.com/3899/ncmm/pkg/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -56,7 +56,7 @@ func New() *Root {
 		cmd: &cobra.Command{
 			Use:     "ncmm",
 			Short:   "ncmm command",
-			Long:    "ncmm is a toolbox for netease cloud music\n\nMIT License Copyright (c) 2024 chaunsin\nhttps://github.com/chaunsin/netease-cloud-music\n" + title,
+			Long:    "ncmm is a toolbox for netease cloud music\n\nMIT License Copyright (c) 2024 chaunsin\nhttps://github.com/3899/ncmm\n" + title,
 			Example: "  ncmm login\n  ncmm playids",
 		},
 	}
@@ -76,8 +76,18 @@ func New() *Root {
 				return fmt.Errorf("init config error: %s", err)
 			}
 		} else {
-			cfgPath = "default"
-			c.Cfg = config.GetDefault()
+			autoCfgPath := filepath.Join(home, "config.yaml")
+			if utils.FileExists(autoCfgPath) {
+				var err error
+				cfgPath = autoCfgPath
+				c.Cfg, err = config.New(autoCfgPath)
+				if err != nil {
+					return fmt.Errorf("init config error: %s", err)
+				}
+			} else {
+				cfgPath = "default"
+				c.Cfg = config.GetDefault()
+			}
 		}
 
 		c.Cfg.ReplaceMagicVariables("HOME", home)
@@ -109,6 +119,8 @@ func New() *Root {
 	// add sub commands
 	c.Add(NewLogin(c, c.l).Command())
 	c.Add(NewPlayIds(c, c.l).Command())
+	c.Add(NewSign(c, c.l).Command())
+	c.Add(NewMusicianVip(c, c.l).Command())
 	return c
 }
 

@@ -27,8 +27,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chaunsin/netease-cloud-music/api"
-	"github.com/chaunsin/netease-cloud-music/api/types"
+	"github.com/3899/ncmm/api"
+	"github.com/3899/ncmm/api/types"
 )
 
 type GetUserInfoDetailReq struct {

@@ -34,7 +34,7 @@ import (
 	"hash"
 	"io"
 
-	"github.com/chaunsin/netease-cloud-music/pkg/crypto"
+	"github.com/3899/ncmm/pkg/crypto"
 )
 
 const (

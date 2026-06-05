@@ -26,7 +26,7 @@ package weapi
 import (
 	"testing"
 
-	"github.com/chaunsin/netease-cloud-music/api/types"
+	"github.com/3899/ncmm/api/types"
 
 	"github.com/stretchr/testify/assert"
 )

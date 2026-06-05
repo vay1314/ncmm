@@ -27,7 +27,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chaunsin/netease-cloud-music/api"
+	"github.com/3899/ncmm/api"
 )
 
 type DjRadioSub struct {

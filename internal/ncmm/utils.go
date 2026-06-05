@@ -34,9 +34,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chaunsin/netease-cloud-music/api/types"
-	"github.com/chaunsin/netease-cloud-music/pkg/cookiecloud"
-	"github.com/chaunsin/netease-cloud-music/pkg/utils"
+	"github.com/3899/ncmm/api/types"
+	"github.com/3899/ncmm/pkg/cookiecloud"
+	"github.com/3899/ncmm/pkg/utils"
 
 	"github.com/spf13/cobra"
 )

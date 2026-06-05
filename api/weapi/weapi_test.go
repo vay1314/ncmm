@@ -28,9 +28,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/chaunsin/netease-cloud-music/api"
-	"github.com/chaunsin/netease-cloud-music/pkg/cookie"
-	"github.com/chaunsin/netease-cloud-music/pkg/log"
+	"github.com/3899/ncmm/api"
+	"github.com/3899/ncmm/pkg/cookie"
+	"github.com/3899/ncmm/pkg/log"
 )
 
 var (

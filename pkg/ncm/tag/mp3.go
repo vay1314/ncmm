@@ -43,7 +43,7 @@ func NewMp3(path string, encoding ...id3v2.Encoding) (*Mp3, error) {
 	if len(encoding) > 0 {
 		encode = encoding[0]
 	}
-	// https://github.com/chaunsin/netease-cloud-music/issues/21#issuecomment-2728279324
+	// https://github.com/3899/ncmm/issues/21#issuecomment-2728279324
 	// https://github.com/n10v/id3v2/issues/88
 	tag.SetDefaultEncoding(encode) //
 	return &Mp3{tag: tag, encoding: encode}, nil

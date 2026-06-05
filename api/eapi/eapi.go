@@ -23,7 +23,7 @@
 
 package eapi
 
-import "github.com/chaunsin/netease-cloud-music/api"
+import "github.com/3899/ncmm/api"
 
 type Api struct {
 	client *api.Client
