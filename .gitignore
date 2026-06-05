@@ -1,0 +1,8 @@
+/temp/
+/ncmctl.exe
+/log/
+/database/
+.idea/
+.vscode/
+.gemini/
+.claude/
