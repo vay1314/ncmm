@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/chaunsin/netease-cloud-music/internal/ncmctl"
+	"github.com/chaunsin/netease-cloud-music/internal/ncmm"
 )
 
 var (
@@ -11,7 +11,7 @@ var (
 )
 
 func main() {
-	c := ncmctl.New()
+	c := ncmm.New()
 	c.Version(Version, BuildTime, Commit)
 	c.Execute()
 }

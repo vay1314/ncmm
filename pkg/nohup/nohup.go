@@ -47,7 +47,7 @@ func Daemon(close ...Close) {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("ncmctl run directory: %s", path)
+	log.Printf("ncmm run directory: %s", path)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)

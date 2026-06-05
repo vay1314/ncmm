@@ -1,4 +1,4 @@
-package ncmctl
+package ncmm
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func NewPlayIds(root *Root, l *log.Logger) *PlayIds {
 		cmd: &cobra.Command{
 			Use:     "playids",
 			Short:   "[need login] 播放指定的歌曲 ID 列表",
-			Example: `  ncmctl playids --ids 3373818852,3373845775`,
+			Example: `  ncmm playids --ids 3373818852,3373845775`,
 		},
 	}
 	c.addFlags()
@@ -238,7 +238,7 @@ func (c *PlayIds) execute(ctx context.Context) error {
 		return fmt.Errorf("验证登录状态失败: %w", err)
 	}
 	if user.Code != 200 || user.Profile == nil || user.Account == nil {
-		return fmt.Errorf("用户未登录或登录态已失效，请使用 ncmctl login 登录")
+		return fmt.Errorf("用户未登录或登录态已失效，请使用 ncmm login 登录")
 	}
 	var uid = fmt.Sprintf("%v", user.Account.Id)
 	c.log("当前账号：uid=%s 昵称=\"%s\"", uid, user.Profile.Nickname)

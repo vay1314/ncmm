@@ -21,7 +21,7 @@
 // SOFTWARE.
 //
 
-package ncmctl
+package ncmm
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func qrcode(root *Login, l *log.Logger) *cobra.Command {
 	c.cmd = &cobra.Command{
 		Use:     "qrcode",
 		Short:   "use qrcode login",
-		Example: "  ncmctl login qrcode",
+		Example: "  ncmm login qrcode",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.execute(cmd.Context(), args)
 		},

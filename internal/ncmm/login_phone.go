@@ -21,7 +21,7 @@
 // SOFTWARE.
 //
 
-package ncmctl
+package ncmm
 
 import (
 	"context"
@@ -54,7 +54,7 @@ func phone(root *Login, l *log.Logger) *cobra.Command {
 	c.cmd = &cobra.Command{
 		Use:     "phone",
 		Short:   "use phone login",
-		Example: "  ncmctl login phone 188xxxx8888\n  ncmctl login phone 188xxxx8888 -p password",
+		Example: "  ncmm login phone 188xxxx8888\n  ncmm login phone 188xxxx8888 -p password",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.execute(cmd.Context(), args)
 		},

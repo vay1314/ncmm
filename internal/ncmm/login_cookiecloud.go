@@ -21,7 +21,7 @@
 // SOFTWARE.
 //
 
-package ncmctl
+package ncmm
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func cookieCloud(root *Login, l *log.Logger) *cobra.Command {
 		Use:     "cookiecloud",
 		Long:    "What is cookiecloud?\n  detail: https://github.com/easychen/CookieCloud",
 		Short:   "use cookiecloud login",
-		Example: "  ncmctl login cookiecloud -u <your uuid> -p <your password> -s http://127.0.0.1:8088",
+		Example: "  ncmm login cookiecloud -u <your uuid> -p <your password> -s http://127.0.0.1:8088",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.execute(cmd.Context(), args)
 		},

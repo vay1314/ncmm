@@ -21,7 +21,7 @@
 // SOFTWARE.
 //
 
-package ncmctl
+package ncmm
 
 import (
 	"fmt"
@@ -54,10 +54,10 @@ type Root struct {
 func New() *Root {
 	c := &Root{
 		cmd: &cobra.Command{
-			Use:     "ncmctl",
-			Short:   "ncmctl command",
-			Long:    "ncmctl is a toolbox for netease cloud music\n\nMIT License Copyright (c) 2024 chaunsin\nhttps://github.com/chaunsin/netease-cloud-music\n" + title,
-			Example: "  ncmctl login\n  ncmctl playids",
+			Use:     "ncmm",
+			Short:   "ncmm command",
+			Long:    "ncmm is a toolbox for netease cloud music\n\nMIT License Copyright (c) 2024 chaunsin\nhttps://github.com/chaunsin/netease-cloud-music\n" + title,
+			Example: "  ncmm login\n  ncmm playids",
 		},
 	}
 	c.cmd.SetVersionTemplate(`{{printf "%s\n" .Version}}`)

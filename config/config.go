@@ -78,7 +78,7 @@ func New(cfgPath ...string) (*Config, error) {
 
 	v := viper.New()
 	v.SetTypeByDefaultValue(true)
-	v.SetEnvPrefix("ncmctl")
+	v.SetEnvPrefix("ncmm")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 	v.AllowEmptyEnv(true)

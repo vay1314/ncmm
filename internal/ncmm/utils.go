@@ -21,7 +21,7 @@
 // SOFTWARE.
 //
 
-package ncmctl
+package ncmm
 
 import (
 	"encoding/json"

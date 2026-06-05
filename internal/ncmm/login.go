@@ -21,7 +21,7 @@
 // SOFTWARE.
 //
 
-package ncmctl
+package ncmm
 
 import (
 	"github.com/chaunsin/netease-cloud-music/pkg/log"
@@ -42,7 +42,7 @@ func NewLogin(root *Root, l *log.Logger) *Login {
 		cmd: &cobra.Command{
 			Use:     "login",
 			Short:   "Login netease cloud music",
-			Example: "  ncmctl login -h\n  ncmctl login qrcode\n  ncmctl login phone\n  ncmctl login cookiecloud\n  ncmctl login cookie",
+			Example: "  ncmm login -h\n  ncmm login qrcode\n  ncmm login phone\n  ncmm login cookiecloud\n  ncmm login cookie",
 		},
 	}
 	c.addFlags()

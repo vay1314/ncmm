@@ -21,7 +21,7 @@
 // SOFTWARE.
 //
 
-package ncmctl
+package ncmm
 
 import (
 	"context"
@@ -124,7 +124,7 @@ func cookie(root *Login, l *log.Logger) *cobra.Command {
 		Use:     "cookie",
 		Short:   "use cookie login",
 		Long:    cookieLongUse,
-		Example: "  ncmctl login cookie -f cookie.txt\n  ncmctl login cookie --format netscaple -f cookie.json\n  ncmctl login cookie 'value'\n  ncmctl login cookie --format json 'value'",
+		Example: "  ncmm login cookie -f cookie.txt\n  ncmm login cookie --format netscaple -f cookie.json\n  ncmm login cookie 'value'\n  ncmm login cookie --format json 'value'",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.execute(cmd.Context(), args)
 		},

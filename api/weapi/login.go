@@ -271,7 +271,7 @@ func (a *Api) TokenRefresh(ctx context.Context, req *TokenRefreshReq) (*TokenRef
 
 type RegisterAnonymousReq struct {
 	types.ReqCommon
-	Username string `json:"username"` // 设备id如果为空则设备id为ncmctl
+	Username string `json:"username"` // 设备id如果为空则设备id为ncmm
 }
 
 type RegisterAnonymousResp struct {
@@ -287,7 +287,7 @@ func (a *Api) RegisterAnonymous(ctx context.Context, req *RegisterAnonymousReq) 
 		opts  = api.NewOptions()
 	)
 	if req.Username == "" {
-		req.Username = "ncmctl" // 默认用户名
+		req.Username = "ncmm" // 默认用户名
 	}
 	username, err := crypto.Anonymous(req.Username)
 	if err != nil {
