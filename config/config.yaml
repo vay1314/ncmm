@@ -75,14 +75,19 @@ playids:
   gap_max: 30
   # 默认歌曲 ID 池（会与命令行参数指定的列表进行并集去重合并）
   ids: "3366663042,3373818852,3373845775,3372894655,3372989897,3370932775,3370931988,3381788772,3372050296,3372046163"
-  # 默认歌曲 ID 文件路径（支持本地路径与远程 http/https 链接，会与命令行参数指定的列表并集去重合并）
-  idsFile: "https://tinyurl.com/34p793j2"
+  # 默认歌曲 ID 文件路径（支持本地路径与远程 http/https 链接，会与命令行参数指定的列表并集去重合并。支持单个字符串或数组列表形式的多源配置）
+  # 示例 (多源配置):
+  idsFile:
+    - "https://spoo.me/gtlf6x2"
+    # - "local/ids.txt"
   # 播放账号控制（命令行参数未指定 --cookie-file 时生效）
   enablePrimary: false      # 默认不启用主账号刷歌
   enableSecondaries: true   # 启用所有辅助账号刷歌
 
 # 签到任务配置
 sign:
+  # 是否在签到过程中自动领取/完成日常云贝、VIP等进阶任务奖励
+  automatic: true
   # 是否启用主账号日常一键签到（云贝、音乐人、黑胶 VIP 签到）
   enablePrimary: true
   # 是否启用所有辅助账号日常一键签到
@@ -129,8 +134,11 @@ note:
     - "音乐人的日常"
     - "分享好听的歌"
     - "每日歌单推荐"
-  # 动态发布标题列表文件路径 (支持本地路径与远程 http/https 链接，会与 titles 并集合并)
-  titlesFile: "https://tinyurl.com/4pjvv5j7"
+  # 动态发布标题列表文件路径 (支持本地路径与远程 http/https 链接，会与 titles 并集合并。支持单个字符串或数组列表形式的多源配置)
+  # 示例 (多源配置):
+  titlesFile:
+    - "https://spoo.me/uJx7s66"
+    # - "local/titles.txt"
   # 笔记文字内容。每次发布时会从中随机选择一条作为正文（若有 messagesFile 则会进行并集合并）
   messages:
     - "穿梭在拥挤的人潮里，耳机隔开外界的喧闹，一首喜欢的歌，就是奔波路上最安稳的小港湾。"
@@ -139,11 +147,15 @@ note:
     - "三餐四季，烟火寻常，闲时放一首爱听的曲子，再普通的日常也能品出温柔的滋味。"
     - "年少听歌只觉得旋律悦耳，长大之后再细品歌词，才慢慢读懂人生里的遗憾与和解。"
     - "夏夜晚风拂过肩头，耳机里的歌声缓缓流淌，把这个季节独有的浪漫与温柔尽数收藏。"
-  # 动态发布文本列表文件路径 (支持本地路径与远程 http/https 链接，会与 messages 并集合并)
-  messagesFile: "https://tinyurl.com/457fuy38"
-  # 图片 URL 链接池。每次发布时会从中随机挑选一个 URL 进行下载并上传
+  # 动态发布文本列表文件路径 (支持本地路径与远程 http/https 链接，会与 messages 并集合并。支持单个字符串或数组列表形式的多源配置)
+  # 示例 (多源配置):
+  messagesFile:
+    - "https://spoo.me/IvmB1RC"
+    # - "local/messages.txt"
+  # 图片 URL 链接池。支持配置本地图片路径、直链，或本地及远程包含链接的文本列表（支持单个字符串或数组列表形式的多源配置。每次发布时会从中随机选择一个可用的图片并下载上传）
+  # 示例 (多源配置):  
   imageUrls:
-    - "https://tinyurl.com/mruxfba5"
+    - "https://picsum.photos/800/600"
   # 动态类型: 35=普通动态, 39=图文笔记
   type: 39
   # 是否在笔记发布成功后自动删除（秒删），以保持个人主页整洁。默认开启
@@ -155,7 +167,7 @@ musicianVip:
   play:
     # 进阶任务专属覆盖的歌曲 ID（留空继承 playids.ids，支持并集去重合并）
     ids: ""
-    # 进阶任务专属覆盖的歌曲 ID 文件路径（留空继承 playids.idsFile，支持并集去重合并）
+    # 进阶任务专属覆盖的歌曲 ID 文件路径（留空继承 playids.idsFile，支持并集去重合并。支持单个字符串或数组列表形式的多源配置）
     idsFile: ""
     # 进阶任务单次运行的播放歌曲随机目标下限 (为 0 则继承 playids.run_min)
     run_min: 0
@@ -165,3 +177,16 @@ musicianVip:
     gap_min: 0
     # 两首歌曲之间的最大随机等待间隔（秒，为 0 则继承 playids.gap_max）
     gap_max: 0
+
+# 批量任务执行配置
+# 若命令行没有指定任何具体任务(例如运行 ncmm task)，则会执行 task 中所有配置为 true 的任务。
+# 若命令行指定了任意具体任务(例如运行 ncmm task --sign --playids)，则仅会执行这些被命令行明确开启的任务，而忽略其他未指定的任务。
+task:
+  # 是否在批量执行中包含日常一键签到
+  sign: true
+  # 是否在批量执行中包含播放指定歌曲任务
+  playids: true
+  # 是否在批量执行中包含音乐人黑胶会员进阶任务
+  musicianVip: false
+  # 是否在批量执行中包含自动发布/删除图文笔记任务
+  note: false

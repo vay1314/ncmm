@@ -47,18 +47,22 @@ func NewNote(root *Root, l *log.Logger) *Note {
 	}
 	c.addFlags()
 	c.cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		cookieFile := c.opts.CookieFile
-		if cookieFile == "" {
-			if c.root.Cfg.Accounts != nil && c.root.Cfg.Accounts.Primary != "" {
-				cookieFile = c.root.Cfg.Accounts.Primary
-			} else {
-				return fmt.Errorf("cookie file must be specified via --cookie-file or configured in config.yaml accounts.primary")
-			}
-		}
-		_, err := c.ExecuteForCookie(cmd.Context(), cookieFile)
-		return err
+		return c.execute(cmd.Context())
 	}
 	return c
+}
+
+func (c *Note) execute(ctx context.Context) error {
+	cookieFile := c.opts.CookieFile
+	if cookieFile == "" {
+		if c.root.Cfg.Accounts != nil && c.root.Cfg.Accounts.Primary != "" {
+			cookieFile = c.root.Cfg.Accounts.Primary
+		} else {
+			return fmt.Errorf("cookie file must be specified via --cookie-file or configured in config.yaml accounts.primary")
+		}
+	}
+	_, err := c.ExecuteForCookie(ctx, cookieFile)
+	return err
 }
 
 func (c *Note) addFlags() {
@@ -112,12 +116,14 @@ func (c *Note) ExecuteForCookie(ctx context.Context, cookieFile string) (int64, 
 	if len(cfg.Messages) > 0 {
 		messages = append(messages, cfg.Messages...)
 	}
-	if cfg.MessagesFile != "" {
-		fileMsgs, err := parseMessagesFromFile(cfg.MessagesFile)
-		if err != nil {
-			c.cmd.Printf("[note] [WARN] 读取 messagesFile (%s) 失败: %s，本次将仅使用内置消息库\n", cfg.MessagesFile, err)
-		} else {
-			messages = append(messages, fileMsgs...)
+	for _, file := range uniqueStrings(cfg.MessagesFile) {
+		if file != "" {
+			fileMsgs, err := parseMessagesFromFile(file)
+			if err != nil {
+				c.cmd.Printf("[note] [WARN] 读取 messagesFile (%s) 失败: %s，该来源将被跳过\n", file, err)
+			} else {
+				messages = append(messages, fileMsgs...)
+			}
 		}
 	}
 
@@ -135,12 +141,14 @@ func (c *Note) ExecuteForCookie(ctx context.Context, cookieFile string) (int64, 
 	if len(cfg.Titles) > 0 {
 		titles = append(titles, cfg.Titles...)
 	}
-	if cfg.TitlesFile != "" {
-		fileTitles, err := parseMessagesFromFile(cfg.TitlesFile)
-		if err != nil {
-			c.cmd.Printf("[note] [WARN] 读取 titlesFile (%s) 失败: %s，本次将仅使用内置标题库\n", cfg.TitlesFile, err)
-		} else {
-			titles = append(titles, fileTitles...)
+	for _, file := range uniqueStrings(cfg.TitlesFile) {
+		if file != "" {
+			fileTitles, err := parseMessagesFromFile(file)
+			if err != nil {
+				c.cmd.Printf("[note] [WARN] 读取 titlesFile (%s) 失败: %s，该来源将被跳过\n", file, err)
+			} else {
+				titles = append(titles, fileTitles...)
+			}
 		}
 	}
 
@@ -165,20 +173,39 @@ func (c *Note) ExecuteForCookie(ctx context.Context, cookieFile string) (int64, 
 
 	var pics string
 	if cfg.Type == 39 {
-		// 获取图片URL
-		imageURL := c.getRandomImageURL(cfg.ImageURLs)
-		if imageURL == "" {
-			return 0, fmt.Errorf("没有配置图片URL，请在 config.yaml 的 note.imageUrls 中配置")
+		// 解析多源图片URL（支持直接图片URL及图片链接文件）
+		uniqueImageUrls := uniqueStrings(c.resolveImageURLs(ctx, cfg.ImageURLs))
+		if len(uniqueImageUrls) == 0 {
+			return 0, fmt.Errorf("没有配置任何有效的图片URL，请在 config.yaml 的 note.imageUrls 中配置")
 		}
 
-		c.cmd.Printf("[note] 发布图文笔记: 标题=%q, 内容=%q, 图片=%s\n", title, msg, imageURL)
+		// 轮询重试下载，直至成功
+		shuffledUrls := shuffleSlice(uniqueImageUrls)
+		var tmpFile string
+		var downloadErr error
+		var selectedURL string
+		for len(shuffledUrls) > 0 {
+			idx := len(shuffledUrls) - 1
+			selectedURL = shuffledUrls[idx]
+			shuffledUrls = shuffledUrls[:idx]
 
-		// 下载图片到临时文件
-		tmpFile, err := downloadImageToTemp(ctx, imageURL)
-		if err != nil {
-			return 0, fmt.Errorf("下载图片失败: %w", err)
+			c.cmd.Printf("[note] 尝试下载图片: %s\n", selectedURL)
+			tmpFile, downloadErr = downloadImageToTemp(ctx, selectedURL)
+			if downloadErr == nil {
+				c.cmd.Printf("[note] 图片下载成功: %s\n", selectedURL)
+				break
+			}
+			c.cmd.Printf("[note] [WARN] 下载图片失败 (%s): %s，尝试下一张...\n", selectedURL, downloadErr)
 		}
-		defer os.Remove(tmpFile)
+
+		if downloadErr != nil || tmpFile == "" {
+			return 0, fmt.Errorf("所有候选图片下载均失败，最后一次错误: %w", downloadErr)
+		}
+		if tmpFile != selectedURL {
+			defer os.Remove(tmpFile)
+		}
+
+		c.cmd.Printf("[note] 发布图文笔记: 标题=%q, 内容=%q, 图片=%s\n", title, msg, selectedURL)
 
 		// 上传图片
 		c.cmd.Println("[note] 上传图片...")
@@ -290,7 +317,7 @@ func parseMessagesFromFile(filePath string) ([]string, error) {
 	var data []byte
 	var err error
 	if strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
-		resp, err := http.Get(filePath)
+		resp, err := httpClient.Get(filePath)
 		if err != nil {
 			return nil, fmt.Errorf("下载远程文件失败: %w", err)
 		}
@@ -318,4 +345,69 @@ func parseMessagesFromFile(filePath string) ([]string, error) {
 		list = append(list, line)
 	}
 	return list, nil
+}
+
+func (c *Note) resolveImageURLs(ctx context.Context, sources []string) []string {
+	var imageUrls []string
+
+	for _, src := range uniqueStrings(sources) {
+		if src == "" {
+			continue
+		}
+		// Check if it's a remote URL
+		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+			// Request it to check if it's a text list of URLs or a direct image
+			resp, err := httpClient.Get(src)
+			if err != nil {
+				c.cmd.Printf("[note] [WARN] 请求图片源 (%s) 失败: %s，该源将被跳过\n", src, err)
+				continue
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+				// If it is an image, it is a direct image URL
+				if strings.HasPrefix(contentType, "image/") {
+					imageUrls = append(imageUrls, src)
+				} else {
+					// Otherwise, read as a list of URLs
+					data, err := io.ReadAll(resp.Body)
+					if err != nil {
+						c.cmd.Printf("[note] [WARN] 读取图片源列表 (%s) 失败: %s\n", src, err)
+						continue
+					}
+					lines := strings.Split(string(data), "\n")
+					for _, line := range lines {
+						line = strings.TrimSpace(line)
+						if line != "" && !strings.HasPrefix(line, "#") {
+							imageUrls = append(imageUrls, line)
+						}
+					}
+				}
+			} else {
+				c.cmd.Printf("[note] [WARN] 请求图片源 (%s) 返回状态码: %d\n", src, resp.StatusCode)
+			}
+		} else {
+			// Local path
+			if strings.HasSuffix(strings.ToLower(src), ".txt") {
+				// Read file as list of URLs
+				data, err := os.ReadFile(src)
+				if err != nil {
+					c.cmd.Printf("[note] [WARN] 读取本地图片源列表 (%s) 失败: %s\n", src, err)
+					continue
+				}
+				lines := strings.Split(string(data), "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					if line != "" && !strings.HasPrefix(line, "#") {
+						imageUrls = append(imageUrls, line)
+					}
+				}
+			} else {
+				// Direct local image file
+				imageUrls = append(imageUrls, src)
+			}
+		}
+	}
+	return imageUrls
 }

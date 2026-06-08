@@ -168,9 +168,9 @@ func (c *MusicianVip) handlePlayTask(ctx context.Context, cli *api.Client, sub e
 
 	// 1. 确定并集去重候选歌曲 ID 来源
 	var idsSource string
-	var idsFileSource string
+	var idsFileSource config.StringOrSlice
 
-	if cfg.IDs != "" || cfg.IDsFile != "" {
+	if cfg.IDs != "" || len(cfg.IDsFile) > 0 {
 		idsSource = cfg.IDs
 		idsFileSource = cfg.IDsFile
 	} else if rootPlayCfg != nil {
@@ -178,7 +178,7 @@ func (c *MusicianVip) handlePlayTask(ctx context.Context, cli *api.Client, sub e
 		idsFileSource = rootPlayCfg.IDsFile
 	}
 
-	if idsSource == "" && idsFileSource == "" {
+	if idsSource == "" && len(idsFileSource) == 0 {
 		return fmt.Errorf("没有配置任何刷歌歌曲ID，请在 config.yaml 的 musicianVip.play 或 playids 中配置 ids / idsFile")
 	}
 
@@ -267,7 +267,7 @@ func (c *MusicianVip) handlePlayTask(ctx context.Context, cli *api.Client, sub e
 		p := NewPlayIds(c.root, c.l)
 		p.opts = PlayIdsOpts{
 			Ids:        cfg.IDs,         // 如果有局部覆盖，以局部为准
-			IdsFile:    cfg.IDsFile,
+			IdsFile:    "",              // 已经在下面参数中解析并传入，此处设为空
 			RunMin:     runTarget,
 			RunMax:     runTarget,
 			GapMin:     gapMin,
@@ -298,10 +298,10 @@ func (c *MusicianVip) handlePlayTask(ctx context.Context, cli *api.Client, sub e
 }
 
 // 辅助工具方法：构建并集歌池传递给 executeForCookie 判定有效主歌上报
-func playCandidateIdsSource(vipIds, vipIdsFile string, rootPlayCfg *config.PlayIdsConfig) []string {
+func playCandidateIdsSource(vipIds string, vipIdsFile config.StringOrSlice, rootPlayCfg *config.PlayIdsConfig) []string {
 	var rawIds []string
 
-	if vipIds != "" || vipIdsFile != "" {
+	if vipIds != "" || len(vipIdsFile) > 0 {
 		if vipIds != "" {
 			parts := strings.Split(vipIds, ",")
 			for _, part := range parts {
@@ -311,12 +311,14 @@ func playCandidateIdsSource(vipIds, vipIdsFile string, rootPlayCfg *config.PlayI
 				}
 			}
 		}
-		if vipIdsFile != "" {
-			fileIds, err := parseIdsFromFile(vipIdsFile)
-			if err == nil {
-				rawIds = append(rawIds, fileIds...)
-			} else {
-				log.Warn("[musician-vip] 读取 VIP idsFile 失败: %s", err)
+		for _, file := range uniqueStrings(vipIdsFile) {
+			if file != "" {
+				fileIds, err := parseIdsFromFile(file)
+				if err == nil {
+					rawIds = append(rawIds, fileIds...)
+				} else {
+					log.Warn("[musician-vip] 读取 VIP idsFile (%s) 失败: %s", file, err)
+				}
 			}
 		}
 	} else if rootPlayCfg != nil {
@@ -329,12 +331,14 @@ func playCandidateIdsSource(vipIds, vipIdsFile string, rootPlayCfg *config.PlayI
 				}
 			}
 		}
-		if rootPlayCfg.IDsFile != "" {
-			fileIds, err := parseIdsFromFile(rootPlayCfg.IDsFile)
-			if err == nil {
-				rawIds = append(rawIds, fileIds...)
-			} else {
-				log.Warn("[musician-vip] 读取默认 idsFile 失败: %s", err)
+		for _, file := range uniqueStrings(rootPlayCfg.IDsFile) {
+			if file != "" {
+				fileIds, err := parseIdsFromFile(file)
+				if err == nil {
+					rawIds = append(rawIds, fileIds...)
+				} else {
+					log.Warn("[musician-vip] 读取默认 idsFile (%s) 失败: %s", file, err)
+				}
 			}
 		}
 	}

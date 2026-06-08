@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/3899/ncmm/api/types"
 	"github.com/3899/ncmm/pkg/cookiecloud"
@@ -173,4 +175,31 @@ func (m Music) String() string {
 		format  = fmt.Sprintf("%02d:%02d:%02d", hours, minutes, secs)
 	)
 	return fmt.Sprintf("%s-%s(%v) [%s]", m.ArtistString(), m.Name, m.Id, format)
+}
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+func uniqueStrings(slice []string) []string {
+	seen := make(map[string]bool)
+	var unique []string
+	for _, s := range slice {
+		s = strings.TrimSpace(s)
+		if s != "" && !seen[s] {
+			seen[s] = true
+			unique = append(unique, s)
+		}
+	}
+	return unique
+}
+
+func shuffleSlice(slice []string) []string {
+	shuffled := make([]string, len(slice))
+	copy(shuffled, slice)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+	return shuffled
 }

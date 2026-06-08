@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/3899/ncmm/api"
@@ -61,6 +62,14 @@ type SignConf struct {
 	EnableSecondaries bool            `json:"enableSecondaries" yaml:"enableSecondaries"`
 	IdentityCacheDays *int            `json:"identityCacheDays" yaml:"identityCacheDays"`
 	YunbeiTask        *YunbeiTaskConf `json:"yunbeiTask" yaml:"yunbeiTask"`
+	Automatic         bool            `json:"automatic" yaml:"automatic"`
+}
+
+type TaskConf struct {
+	Sign        bool `json:"sign" yaml:"sign"`
+	PlayIds     bool `json:"playids" yaml:"playids"`
+	MusicianVip bool `json:"musicianVip" yaml:"musicianVip"`
+	Note        bool `json:"note" yaml:"note"`
 }
 
 type MixPlayConf struct {
@@ -69,17 +78,35 @@ type MixPlayConf struct {
 	CountTarget         bool    `json:"countTarget" yaml:"countTarget"`
 }
 
+// StringOrSlice supports unmarshaling from either a single string or an array of strings.
+type StringOrSlice []string
+
+// UnmarshalYAML implements yaml.Unmarshaler
+func (s *StringOrSlice) UnmarshalYAML(value *yaml.Node) error {
+	var str string
+	if err := value.Decode(&str); err == nil {
+		*s = []string{str}
+		return nil
+	}
+	var slice []string
+	if err := value.Decode(&slice); err == nil {
+		*s = slice
+		return nil
+	}
+	return fmt.Errorf("failed to unmarshal StringOrSlice at line %d", value.Line)
+}
+
 type PlayIdsConfig struct {
-	DailyMin          int64  `json:"daily_min" yaml:"daily_min"`
-	DailyMax          int64  `json:"daily_max" yaml:"daily_max"`
-	RunMin            int64  `json:"run_min" yaml:"run_min"`
-	RunMax            int64  `json:"run_max" yaml:"run_max"`
-	GapMin            int64  `json:"gap_min" yaml:"gap_min"`
-	GapMax            int64  `json:"gap_max" yaml:"gap_max"`
-	IDs               string `json:"ids" yaml:"ids"`
-	IDsFile           string `json:"idsFile" yaml:"idsFile"`
-	EnablePrimary     bool   `json:"enablePrimary" yaml:"enablePrimary"`
-	EnableSecondaries bool   `json:"enableSecondaries" yaml:"enableSecondaries"`
+	DailyMin          int64         `json:"daily_min" yaml:"daily_min"`
+	DailyMax          int64         `json:"daily_max" yaml:"daily_max"`
+	RunMin            int64         `json:"run_min" yaml:"run_min"`
+	RunMax            int64         `json:"run_max" yaml:"run_max"`
+	GapMin            int64         `json:"gap_min" yaml:"gap_min"`
+	GapMax            int64         `json:"gap_max" yaml:"gap_max"`
+	IDs               string        `json:"ids" yaml:"ids"`
+	IDsFile           StringOrSlice `json:"idsFile" yaml:"idsFile"`
+	EnablePrimary     bool          `json:"enablePrimary" yaml:"enablePrimary"`
+	EnableSecondaries bool          `json:"enableSecondaries" yaml:"enableSecondaries"`
 }
 
 type Config struct {
@@ -94,6 +121,7 @@ type Config struct {
 	MixPlay     *MixPlayConf     `json:"mixPlay" yaml:"mixPlay"`
 	Note        *NoteConf        `json:"note" yaml:"note"`
 	MusicianVip *MusicianVipConf `json:"musicianVip" yaml:"musicianVip"`
+	Task        *TaskConf        `json:"task" yaml:"task"`
 }
 
 // MusicianVipConf 音乐人黑胶会员任务配置
@@ -103,23 +131,23 @@ type MusicianVipConf struct {
 
 // NoteConf 笔记发布公共配置
 type NoteConf struct {
-	Titles       []string `json:"titles" yaml:"titles"`
-	TitlesFile   string   `json:"titlesFile" yaml:"titlesFile"`
-	Messages     []string `json:"messages" yaml:"messages"`
-	MessagesFile string   `json:"messagesFile" yaml:"messagesFile"`
-	ImageURLs    []string `json:"imageUrls" yaml:"imageUrls"`
-	Type         int      `json:"type" yaml:"type"`
-	AutoDelete   *bool    `json:"autoDelete" yaml:"autoDelete"`
+	Titles       []string      `json:"titles" yaml:"titles"`
+	TitlesFile   StringOrSlice `json:"titlesFile" yaml:"titlesFile"`
+	Messages     []string      `json:"messages" yaml:"messages"`
+	MessagesFile StringOrSlice `json:"messagesFile" yaml:"messagesFile"`
+	ImageURLs    StringOrSlice `json:"imageUrls" yaml:"imageUrls"`
+	Type         int           `json:"type" yaml:"type"`
+	AutoDelete   *bool         `json:"autoDelete" yaml:"autoDelete"`
 }
 
 // MusicianVipPlayConf 播放任务配置
 type MusicianVipPlayConf struct {
-	IDs     string `json:"ids" yaml:"ids"`
-	IDsFile string `json:"idsFile" yaml:"idsFile"`
-	RunMin  int64  `json:"run_min" yaml:"run_min"`
-	RunMax  int64  `json:"run_max" yaml:"run_max"`
-	GapMin  int64  `json:"gap_min" yaml:"gap_min"`
-	GapMax  int64  `json:"gap_max" yaml:"gap_max"`
+	IDs     string        `json:"ids" yaml:"ids"`
+	IDsFile StringOrSlice `json:"idsFile" yaml:"idsFile"`
+	RunMin  int64         `json:"run_min" yaml:"run_min"`
+	RunMax  int64         `json:"run_max" yaml:"run_max"`
+	GapMin  int64         `json:"gap_min" yaml:"gap_min"`
+	GapMax  int64         `json:"gap_max" yaml:"gap_max"`
 }
 
 func (c *Config) Validate() error {
@@ -154,6 +182,31 @@ func New(cfgPath ...string) (*Config, error) {
 		conf Config
 		opts = func(m *mapstructure.DecoderConfig) {
 			m.TagName = "yaml"
+			m.DecodeHook = mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				mapstructure.StringToSliceHookFunc(","),
+				func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
+					if t == reflect.TypeOf(StringOrSlice{}) {
+						switch v := data.(type) {
+						case string:
+							return StringOrSlice{v}, nil
+						case []interface{}:
+							var res StringOrSlice
+							for _, item := range v {
+								if s, ok := item.(string); ok {
+									res = append(res, s)
+								} else {
+									return nil, fmt.Errorf("invalid element type in StringOrSlice: %T", item)
+								}
+							}
+							return res, nil
+						case []string:
+							return StringOrSlice(v), nil
+						}
+					}
+					return data, nil
+				},
+			)
 		}
 		_cfgPath string
 	)
@@ -206,18 +259,25 @@ func (c *Config) ReplaceMagicVariables(name, value string) (*Config, bool) {
 			c.Accounts.Secondary[i] = os.Expand(sec, mapping)
 		}
 	}
-	if c.PlayIds != nil && c.PlayIds.IDsFile != "" {
-		c.PlayIds.IDsFile = os.Expand(c.PlayIds.IDsFile, mapping)
+	if c.PlayIds != nil {
+		for i, file := range c.PlayIds.IDsFile {
+			c.PlayIds.IDsFile[i] = os.Expand(file, mapping)
+		}
 	}
-	if c.MusicianVip != nil && c.MusicianVip.Play.IDsFile != "" {
-		c.MusicianVip.Play.IDsFile = os.Expand(c.MusicianVip.Play.IDsFile, mapping)
+	if c.MusicianVip != nil {
+		for i, file := range c.MusicianVip.Play.IDsFile {
+			c.MusicianVip.Play.IDsFile[i] = os.Expand(file, mapping)
+		}
 	}
 	if c.Note != nil {
-		if c.Note.MessagesFile != "" {
-			c.Note.MessagesFile = os.Expand(c.Note.MessagesFile, mapping)
+		for i, file := range c.Note.MessagesFile {
+			c.Note.MessagesFile[i] = os.Expand(file, mapping)
 		}
-		if c.Note.TitlesFile != "" {
-			c.Note.TitlesFile = os.Expand(c.Note.TitlesFile, mapping)
+		for i, file := range c.Note.TitlesFile {
+			c.Note.TitlesFile[i] = os.Expand(file, mapping)
+		}
+		for i, file := range c.Note.ImageURLs {
+			c.Note.ImageURLs[i] = os.Expand(file, mapping)
 		}
 	}
 	return c, isset

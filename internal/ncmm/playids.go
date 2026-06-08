@@ -177,9 +177,10 @@ func (c *PlayIds) execute(ctx context.Context) error {
 	if c.opts.IdsFile != "" {
 		fileIds, err := parseIdsFromFile(c.opts.IdsFile)
 		if err != nil {
-			return fmt.Errorf("读取命令行 --ids-file 失败: %w", err)
+			c.log("[WARN] 读取命令行 --ids-file (%s) 失败: %s，该来源将被跳过", c.opts.IdsFile, err)
+		} else {
+			rawIds = append(rawIds, fileIds...)
 		}
-		rawIds = append(rawIds, fileIds...)
 	}
 
 	// B. 并集收集配置文件中的歌曲 ID
@@ -193,12 +194,15 @@ func (c *PlayIds) execute(ctx context.Context) error {
 				}
 			}
 		}
-		if c.root.Cfg.PlayIds.IDsFile != "" {
-			fileIds, err := parseIdsFromFile(c.root.Cfg.PlayIds.IDsFile)
-			if err != nil {
-				return fmt.Errorf("读取配置文件 playids.idsFile 失败: %w", err)
+		for _, file := range uniqueStrings(c.root.Cfg.PlayIds.IDsFile) {
+			if file != "" {
+				fileIds, err := parseIdsFromFile(file)
+				if err != nil {
+					c.log("[WARN] 读取配置文件 playids.idsFile (%s) 失败: %s，该来源将被跳过", file, err)
+				} else {
+					rawIds = append(rawIds, fileIds...)
+				}
 			}
-			rawIds = append(rawIds, fileIds...)
 		}
 	}
 
@@ -797,21 +801,11 @@ func (c *PlayIds) getSongsDetailWithRetry(ctx context.Context, request *weapi.Ap
 	return result, nil
 }
 
-func shuffleSlice(slice []string) []string {
-	shuffled := make([]string, len(slice))
-	copy(shuffled, slice)
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	r.Shuffle(len(shuffled), func(i, j int) {
-		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-	})
-	return shuffled
-}
-
 func parseIdsFromFile(filePath string) ([]string, error) {
 	var data []byte
 	var err error
 	if strings.HasPrefix(filePath, "http://") || strings.HasPrefix(filePath, "https://") {
-		resp, err := http.Get(filePath)
+		resp, err := httpClient.Get(filePath)
 		if err != nil {
 			return nil, fmt.Errorf("下载远程歌曲ID文件失败: %w", err)
 		}

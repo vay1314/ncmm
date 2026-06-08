@@ -58,6 +58,16 @@ func (c *SignIn) validate() error {
 	return nil
 }
 
+func (c *SignIn) isAutomatic() bool {
+	if c.opts.Automatic {
+		return true
+	}
+	if c.root.Cfg.Sign != nil && c.root.Cfg.Sign.Automatic {
+		return true
+	}
+	return false
+}
+
 func (c *SignIn) Add(command ...*cobra.Command) {
 	c.cmd.AddCommand(command...)
 }
@@ -215,7 +225,7 @@ func (c *SignIn) runSignForCookie(ctx context.Context, cookieFile string, isPrim
 	}
 
 	// 获取签到进度与自动领取
-	if c.opts.Automatic {
+	if c.isAutomatic() {
 		progress, err := request.YunBeiSignInProgress(ctx, &weapi.YunBeiSignInProgressReq{})
 		if err == nil && progress.Code == 200 {
 			for _, v := range progress.Data.LotteryConfig {
@@ -253,7 +263,7 @@ func (c *SignIn) runSignForCookie(ctx context.Context, cookieFile string, isPrim
 			}
 
 			// 一键领取所有已完成成长值
-			if c.opts.Automatic {
+			if c.isAutomatic() {
 				reward, err := request.VipRewardGetAll(ctx, &weapi.VipRewardGetAllReq{})
 				if err == nil && reward.Data.Result {
 					c.cmd.Println("  ✅ 黑胶成长值已一键领取成功")
