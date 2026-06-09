@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/3899/ncmm/api"
@@ -30,7 +29,6 @@ type SignIn struct {
 	cmd  *cobra.Command
 	l    *log.Logger
 	opts SignInOpts
-	wg   sync.WaitGroup
 }
 
 func NewSign(root *Root, l *log.Logger) *SignIn {
@@ -111,9 +109,6 @@ func (c *SignIn) execute(ctx context.Context) error {
 	if !hasExecuted {
 		c.cmd.Println("[sign] 未启用或未配置任何账号进行日常签到，请检查 config.yaml")
 	} else {
-		// 等待所有后台日推播放任务完成
-		c.cmd.Println("[sign] 等待所有后台日推播放任务完成...")
-		c.wg.Wait()
 		c.cmd.Println("[sign] 所有日常签到及播放任务执行完毕！")
 	}
 	return nil
@@ -305,6 +300,7 @@ func (c *SignIn) handleYunbeiTasks(ctx context.Context, cli *api.Client, request
 	c.handleReserveYunbei(ctx, eapiRequest)
 
 	// 3. 筛选并执行未完成的任务
+	var playDailyRecommendTaskName string
 	for _, v := range task.Data {
 		if v.Completed {
 			continue
@@ -348,14 +344,15 @@ func (c *SignIn) handleYunbeiTasks(ctx context.Context, cli *api.Client, request
 			}
 		case "听歌30分钟", "听歌", "每日推荐", "听推荐歌曲", "听推荐歌单中的歌", "听音乐30分钟":
 			if c.root.Cfg.Sign.YunbeiTask != nil && c.root.Cfg.Sign.YunbeiTask.EnablePlayDailyRecommend {
-				c.cmd.Printf("  👉 开始后台执行 [%s] 任务 (使用 [播放日推] 开关控制)...\n", v.TaskName)
-				c.wg.Add(1)
-				go func(taskName string) {
-					defer c.wg.Done()
-					c.doPlayDailyRecommend(ctx, cookieFile, taskName)
-				}(v.TaskName)
+				playDailyRecommendTaskName = v.TaskName
 			}
 		}
+	}
+
+	// 4. 执行日推播放任务 (前台串行，作为当前账号最后一个任务执行)
+	if playDailyRecommendTaskName != "" {
+		c.cmd.Printf("  👉 开始执行 [%s] 任务 (使用 [播放日推] 开关控制)...\n", playDailyRecommendTaskName)
+		c.doPlayDailyRecommend(ctx, cookieFile, playDailyRecommendTaskName)
 	}
 
 	// 5. 重新获取任务列表以获取最新的 userTaskId 和 depositCode 以供完成领奖
@@ -379,6 +376,21 @@ func (c *SignIn) handleYunbeiTasks(ctx context.Context, cli *api.Client, request
 		}
 		if claimedCount == 0 {
 			c.cmd.Println("  ℹ️ 没有可领取的任务奖励")
+		}
+
+		// 6. 领奖后再次获取任务列表并打印最终状态
+		finalTask, err := eapiRequest.YunBeiTaskTodo(ctx, &eapi.YunBeiTaskTodoReq{})
+		if err == nil && finalTask.Code == 200 {
+			c.cmd.Println("  👉 领奖后最终的任务列表:")
+			for _, v := range finalTask.Data {
+				statusStr := "已完成"
+				if !v.Completed {
+					statusStr = "未完成"
+				}
+				c.cmd.Printf("    - 任务: %-15s | 状态: %-6s | 奖励: %d 云贝\n", v.TaskName, statusStr, v.TaskPoint)
+			}
+		} else {
+			c.cmd.Printf("  ❌ 领奖后获取任务列表失败: %v\n", err)
 		}
 	} else {
 		c.cmd.Printf("  ❌ 重新拉取任务列表失败: %v\n", err)
@@ -587,6 +599,26 @@ func (c *SignIn) handleReserveYunbei(ctx context.Context, eapiRequest *eapi.Api)
 		})
 		if err == nil && receive.Code == 200 {
 			c.cmd.Printf("  🎉 预约活动奖励领取成功，获得云贝数量：%v\n", receive.Data.CurrentAmount)
+			
+			// 领取成功后，重新获取最新的预约信息并执行自动预约新活动
+			c.cmd.Println("  👉 奖励领取成功，正在检查并自动预约新活动...")
+			info, err = eapiRequest.YunbeiReserveInfo(ctx, &eapi.YunbeiReserveInfoReq{})
+			if err == nil && info.Code == 200 {
+				chineseStatus = getReserveStatusChinese(info.Data.Type)
+				if strings.Contains(info.Data.Type, "NO_BOOK") {
+					c.cmd.Printf("  👉 检测到当前预约状态: [%s]，开始执行预约...\n", chineseStatus)
+					booked, err := eapiRequest.YunbeiReserveBooked(ctx, &eapi.YunbeiReserveBookedReq{ReqId: info.Data.ReqId})
+					if err == nil && booked.Code == 200 {
+						c.cmd.Println("  ✅ 预约活动成功！")
+					} else {
+						c.cmd.Printf("  ❌ 预约活动失败: %v\n", err)
+					}
+				} else {
+					c.cmd.Printf("  ℹ️ 当前预约状态: [%s]，无须做预约操作\n", chineseStatus)
+				}
+			} else {
+				c.cmd.Printf("  ❌ 重新获取活动预约状态失败: %v\n", err)
+			}
 		} else {
 			c.cmd.Printf("  ❌ 领取预约活动奖励失败: %v\n", err)
 		}
@@ -773,12 +805,12 @@ func (c *SignIn) doPublishNote(ctx context.Context, cookieFile string) {
 	}
 }
 
-// doPlayDailyRecommend 后台并发拉起日推歌曲播放 31~45 分钟
+// doPlayDailyRecommend 串行执行日推歌曲播放 31~45 分钟
 func (c *SignIn) doPlayDailyRecommend(ctx context.Context, cookieFile string, taskName string) {
-	c.cmd.Printf("  ⏳ [后台日推播放] 正在初始化播放服务 (%s)...\n", cookieFile)
+	c.cmd.Printf("  ⏳ [日推播放] 正在初始化播放服务 (%s)...\n", cookieFile)
 	absPath, err := filepath.Abs(cookieFile)
 	if err != nil {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 解析 cookie 路径失败: %v\n", cookieFile, err)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 解析 cookie 路径失败: %v\n", cookieFile, err)
 		return
 	}
 
@@ -787,7 +819,7 @@ func (c *SignIn) doPlayDailyRecommend(ctx context.Context, cookieFile string, ta
 
 	cli, err := api.NewClient(&networkCfg, c.l)
 	if err != nil {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 实例化客户端失败: %v\n", cookieFile, err)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 实例化客户端失败: %v\n", cookieFile, err)
 		return
 	}
 	defer cli.Close(ctx)
@@ -796,11 +828,11 @@ func (c *SignIn) doPlayDailyRecommend(ctx context.Context, cookieFile string, ta
 	// 获取用户信息以过滤用户本人的歌
 	user, err := request.GetUserInfo(ctx, &weapi.GetUserInfoReq{})
 	if err != nil {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 验证登录状态失败: %v\n", cookieFile, err)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 验证登录状态失败: %v\n", cookieFile, err)
 		return
 	}
 	if user.Code != 200 || user.Profile == nil || user.Account == nil {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 用户未登录或登录态已失效\n", cookieFile)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 用户未登录或登录态已失效\n", cookieFile)
 		return
 	}
 	nickname := user.Profile.Nickname
@@ -809,11 +841,11 @@ func (c *SignIn) doPlayDailyRecommend(ctx context.Context, cookieFile string, ta
 	// 拉取每日推荐歌曲
 	recommendResp, err := request.RecommendSongs(ctx, &weapi.RecommendSongsReq{})
 	if err != nil {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 拉取每日推荐失败: %v\n", cookieFile, err)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 拉取每日推荐失败: %v\n", cookieFile, err)
 		return
 	}
 	if recommendResp.Code != 200 || len(recommendResp.Data.DailySongs) == 0 {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 接口返回暂无推荐歌曲\n", cookieFile)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 接口返回暂无推荐歌曲\n", cookieFile)
 		return
 	}
 
@@ -839,7 +871,7 @@ func (c *SignIn) doPlayDailyRecommend(ctx context.Context, cookieFile string, ta
 			isSelf = true
 		}
 		if isSelf {
-			c.cmd.Printf("  ⚠️ [后台日推播放] (%s) 检测到推荐歌曲 %s (ID: %d) 是歌手本人歌曲，自动跳过\n", cookieFile, song.Name, song.Id)
+			c.cmd.Printf("  ⚠️ [日推播放] (%s) 检测到推荐歌曲 %s (ID: %d) 是歌手本人歌曲，自动跳过\n", cookieFile, song.Name, song.Id)
 			continue
 		}
 
@@ -860,11 +892,11 @@ func (c *SignIn) doPlayDailyRecommend(ctx context.Context, cookieFile string, ta
 	}
 
 	if len(recommendSongIds) == 0 {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 没有可播放的推荐歌曲\n", cookieFile)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 没有可播放的推荐歌曲\n", cookieFile)
 		return
 	}
 
-	c.cmd.Printf("  👉 [后台日推播放] (%s) 已计算完成：目标播放时间为 %d 分钟，需要播放约 %d 首日推歌。\n", cookieFile, targetMinutes, targetSongsCount)
+	c.cmd.Printf("  👉 [日推播放] (%s) 已计算完成：目标播放时间为 %d 分钟，需要播放约 %d 首日推歌。\n", cookieFile, targetMinutes, targetSongsCount)
 
 	// 实例化 PlayIds 并执行
 	p := NewPlayIds(c.root, c.l)
@@ -879,8 +911,8 @@ func (c *SignIn) doPlayDailyRecommend(ctx context.Context, cookieFile string, ta
 
 	_, err = p.executeForCookie(ctx, cookieFile, recommendSongIds)
 	if err != nil {
-		c.cmd.Printf("  ❌ [后台日推播放] (%s) 播放日推失败: %v\n", cookieFile, err)
+		c.cmd.Printf("  ❌ [日推播放] (%s) 播放日推失败: %v\n", cookieFile, err)
 	} else {
-		c.cmd.Printf("  ✅ [后台日推播放] (%s) 成功播放日推歌曲完成\n", cookieFile)
+		c.cmd.Printf("  ✅ [日推播放] (%s) 成功播放日推歌曲完成\n", cookieFile)
 	}
 }
