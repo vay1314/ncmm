@@ -12,11 +12,12 @@ import (
 )
 
 type TaskOpts struct {
-	Sign      bool
-	PlayIds   bool
-	Musician  bool
-	Note      bool
-	FansGroup bool
+	Sign         bool
+	PlayIds      bool
+	MusicianSign bool
+	MusicianVip  bool
+	Note         bool
+	FansGroup    bool
 }
 
 type Task struct {
@@ -33,7 +34,7 @@ func NewTask(root *Root, l *log.Logger) *Task {
 		cmd: &cobra.Command{
 			Use:     "task",
 			Short:   "Batch execute configured tasks",
-			Example: "  ncmm task\n  ncmm task --sign --playids",
+			Example: "  ncmm task\n  ncmm task --sign --playids\n  ncmm task --musician-sign --musician-vip",
 		},
 	}
 	c.addFlags()
@@ -50,7 +51,8 @@ func (c *Task) Command() *cobra.Command {
 func (c *Task) addFlags() {
 	c.cmd.Flags().BoolVar(&c.opts.Sign, "sign", false, "执行日常签到任务")
 	c.cmd.Flags().BoolVar(&c.opts.PlayIds, "playids", false, "执行播放指定歌曲任务")
-	c.cmd.Flags().BoolVar(&c.opts.Musician, "musician", false, "执行音乐人日常与VIP进阶任务")
+	c.cmd.Flags().BoolVar(&c.opts.MusicianSign, "musician-sign", false, "执行音乐人日常签到任务")
+	c.cmd.Flags().BoolVar(&c.opts.MusicianVip, "musician-vip", false, "执行音乐人VIP进阶任务")
 	c.cmd.Flags().BoolVar(&c.opts.Note, "note", false, "执行笔记发布任务")
 	c.cmd.Flags().BoolVar(&c.opts.FansGroup, "fansgroup", false, "执行乐迷团任务")
 }
@@ -59,16 +61,18 @@ func (c *Task) execute(ctx context.Context) error {
 	// 确定是否有命令行参数指定了特定任务
 	hasFlags := c.cmd.Flags().Changed("sign") ||
 		c.cmd.Flags().Changed("playids") ||
-		c.cmd.Flags().Changed("musician") ||
+		c.cmd.Flags().Changed("musician-sign") ||
+		c.cmd.Flags().Changed("musician-vip") ||
 		c.cmd.Flags().Changed("note") ||
 		c.cmd.Flags().Changed("fansgroup")
 
-	var runSign, runPlayIds, runMusician, runNote, runFansGroup bool
+	var runSign, runPlayIds, runMusicianSign, runMusicianVip, runNote, runFansGroup bool
 
 	if hasFlags {
 		runSign = c.opts.Sign
 		runPlayIds = c.opts.PlayIds
-		runMusician = c.opts.Musician
+		runMusicianSign = c.opts.MusicianSign
+		runMusicianVip = c.opts.MusicianVip
 		runNote = c.opts.Note
 		runFansGroup = c.opts.FansGroup
 	} else {
@@ -76,7 +80,8 @@ func (c *Task) execute(ctx context.Context) error {
 		if c.root.Cfg.Task != nil {
 			runSign = c.root.Cfg.Task.Sign
 			runPlayIds = c.root.Cfg.Task.PlayIds
-			runMusician = c.root.Cfg.Task.Musician
+			runMusicianSign = c.root.Cfg.Task.MusicianSign
+			runMusicianVip = c.root.Cfg.Task.MusicianVip
 			runNote = c.root.Cfg.Task.Note
 			runFansGroup = c.root.Cfg.Task.FansGroup
 		} else {
@@ -85,7 +90,7 @@ func (c *Task) execute(ctx context.Context) error {
 		}
 	}
 
-	if !runSign && !runPlayIds && !runMusician && !runNote && !runFansGroup {
+	if !runSign && !runPlayIds && !runMusicianSign && !runMusicianVip && !runNote && !runFansGroup {
 		c.cmd.Println("[task] 没有需要执行的任务")
 		return nil
 	}
@@ -121,25 +126,43 @@ func (c *Task) execute(ctx context.Context) error {
 		if hasFlags {
 			c.cmd.Println("[task] >>> [播放指定歌曲] 任务未在命令行中指定，跳过执行 <<<")
 		} else {
-			c.cmd.Println("[task] >>> [播放指定歌曲] 任务已在配置文件中关闭 (playIds = false)，跳过执行 <<<")
+			c.cmd.Println("[task] >>> [播放指定歌曲] 任务已在配置文件中关闭 (playids = false)，跳过执行 <<<")
 		}
 		c.cmd.Println()
 	}
 
-	if runMusician {
-		c.cmd.Println("[task] >>> 开始执行 [音乐人任务] 任务 <<<")
+	if runMusicianSign {
+		c.cmd.Println("[task] >>> 开始执行 [音乐人日常签到] 任务 <<<")
 		m := NewMusician(c.root, c.l)
-		if err := m.execute(ctx); err != nil {
-			c.cmd.Printf("[task] ❌ [音乐人任务] 执行失败: %s\n", err)
+		if err := m.executeSign(ctx); err != nil {
+			c.cmd.Printf("[task] ❌ [音乐人日常签到] 执行失败: %s\n", err)
 		} else {
-			c.cmd.Println("[task] ✅ [音乐人任务] 执行成功")
+			c.cmd.Println("[task] ✅ [音乐人日常签到] 执行成功")
 		}
 		c.cmd.Println()
 	} else {
 		if hasFlags {
-			c.cmd.Println("[task] >>> [音乐人任务] 任务未在命令行中指定，跳过执行 <<<")
+			c.cmd.Println("[task] >>> [音乐人日常签到] 任务未在命令行中指定，跳过执行 <<<")
 		} else {
-			c.cmd.Println("[task] >>> [音乐人任务] 任务已在配置文件中关闭 (musician = false)，跳过执行 <<<")
+			c.cmd.Println("[task] >>> [音乐人日常签到] 任务已在配置文件中关闭 (musician-sign = false)，跳过执行 <<<")
+		}
+		c.cmd.Println()
+	}
+
+	if runMusicianVip {
+		c.cmd.Println("[task] >>> 开始执行 [音乐人VIP进阶] 任务 <<<")
+		m := NewMusician(c.root, c.l)
+		if err := m.executeVip(ctx); err != nil {
+			c.cmd.Printf("[task] ❌ [音乐人VIP进阶] 执行失败: %s\n", err)
+		} else {
+			c.cmd.Println("[task] ✅ [音乐人VIP进阶] 执行成功")
+		}
+		c.cmd.Println()
+	} else {
+		if hasFlags {
+			c.cmd.Println("[task] >>> [音乐人VIP进阶] 任务未在命令行中指定，跳过执行 <<<")
+		} else {
+			c.cmd.Println("[task] >>> [音乐人VIP进阶] 任务已在配置文件中关闭 (musician-vip = false)，跳过执行 <<<")
 		}
 		c.cmd.Println()
 	}
@@ -169,6 +192,13 @@ func (c *Task) execute(ctx context.Context) error {
 			c.cmd.Printf("[task] ❌ [乐迷团任务] 执行失败: %s\n", err)
 		} else {
 			c.cmd.Println("[task] ✅ [乐迷团任务] 执行成功")
+		}
+		c.cmd.Println()
+	} else {
+		if hasFlags {
+			c.cmd.Println("[task] >>> [乐迷团任务] 任务未在命令行中指定，跳过执行 <<<")
+		} else {
+			c.cmd.Println("[task] >>> [乐迷团任务] 任务已在配置文件中关闭 (fansgroup = false)，跳过执行 <<<")
 		}
 		c.cmd.Println()
 	}

@@ -71,11 +71,12 @@ type SignConf struct {
 }
 
 type TaskConf struct {
-	Sign      bool `json:"sign" yaml:"sign"`
-	PlayIds   bool `json:"playids" yaml:"playids"`
-	Musician  bool `json:"musician" yaml:"musician"`
-	Note      bool `json:"note" yaml:"note"`
-	FansGroup bool `json:"fansGroup" yaml:"fansGroup"`
+	Sign         bool `json:"sign" yaml:"sign"`
+	PlayIds      bool `json:"playids" yaml:"playids"`
+	MusicianSign bool `json:"musician-sign" yaml:"musician-sign"`
+	MusicianVip  bool `json:"musician-vip" yaml:"musician-vip"`
+	Note         bool `json:"note" yaml:"note"`
+	FansGroup    bool `json:"fansgroup" yaml:"fansgroup"`
 }
 
 // FansGroupConf 乐迷团任务配置
@@ -135,7 +136,7 @@ type Config struct {
 	MixPlay     *MixPlayConf     `json:"mixPlay" yaml:"mixPlay"`
 	Note      *NoteConf      `json:"note" yaml:"note"`
 	Musician  *MusicianConf  `json:"musician" yaml:"musician"`
-	FansGroup *FansGroupConf `json:"fansGroup" yaml:"fansGroup"`
+	FansGroup *FansGroupConf `json:"fansgroup" yaml:"fansgroup"`
 	Task      *TaskConf      `json:"task" yaml:"task"`
 }
 
@@ -144,6 +145,8 @@ type MusicianConf struct {
 	EnableMain        bool             `json:"enableMain" yaml:"enableMain"`
 	EnableSecondaries bool             `json:"enableSecondaries" yaml:"enableSecondaries"`
 	IdentityCacheDays *int             `json:"identityCacheDays" yaml:"identityCacheDays"`
+	EnableVipNote     *bool            `json:"enableVipNote" yaml:"enableVipNote"`
+	EnableVipPlay     *bool            `json:"enableVipPlay" yaml:"enableVipPlay"`
 	Play              MusicianPlayConf `json:"play" yaml:"play"`
 }
 
@@ -209,6 +212,14 @@ func (c *Config) Validate() error {
 		if c.Musician.IdentityCacheDays == nil {
 			days := 30
 			c.Musician.IdentityCacheDays = &days
+		}
+		if c.Musician.EnableVipNote == nil {
+			enable := true
+			c.Musician.EnableVipNote = &enable
+		}
+		if c.Musician.EnableVipPlay == nil {
+			enable := true
+			c.Musician.EnableVipPlay = &enable
 		}
 	}
 	return nil
@@ -412,15 +423,25 @@ func migrateNode(node *yaml.Node) bool {
 				modified = true
 			}
 
-			// Case 5: Rename task.musicianVip to task.musician
+			// Case 5: Rename old task keys
 			if keyNode.Value == "task" && valNode.Kind == yaml.MappingNode {
 				for j := 0; j < len(valNode.Content); j += 2 {
 					subKey := valNode.Content[j]
-					if subKey.Value == "musicianVip" {
-						subKey.Value = "musician"
+					switch subKey.Value {
+					case "musicianVip", "musician":
+						subKey.Value = "musician-sign"
+						modified = true
+					case "fansGroup":
+						subKey.Value = "fansgroup"
 						modified = true
 					}
 				}
+			}
+
+			// Case 6: Rename top-level fansGroup to fansgroup
+			if keyNode.Value == "fansGroup" {
+				keyNode.Value = "fansgroup"
+				modified = true
 			}
 
 			if migrateNode(valNode) {

@@ -61,6 +61,8 @@ database:
 
 # playids 播放指定歌曲配置
 playids:
+  enableMain: false      # 默认不启用主账号刷歌
+  enableSecondaries: true   # 启用所有辅助账号刷歌
   # 每日播放歌曲随机下限 (每天首次启动时在此范围内随机生成当日上限目标)
   daily_min: 50
   # 每日播放歌曲随机上限
@@ -81,8 +83,6 @@ playids:
     - "https://spoo.me/gtlf6x2"
     # - "local/ids.txt"
   # 播放账号控制（命令行参数未指定 --cookie-file 时生效）
-  enableMain: false      # 默认不启用主账号刷歌
-  enableSecondaries: true   # 启用所有辅助账号刷歌
 
 # 签到任务配置
 sign:
@@ -168,6 +168,10 @@ musician:
   # 音乐人身份状态的本地缓存时间（单位：天），默认永久有效。
   # 设置为 0 代表永久有效；设置为 -1 可关闭缓存。
   identityCacheDays: 0
+  # 是否在VIP进阶任务中自动发布笔记（默认开启）
+  enableVipNote: true
+  # 是否在VIP进阶任务中自动接力刷播放量（默认开启）
+  enableVipPlay: true
   # 播放任务配置 (专门用于进阶任务的接力刷歌)
   play:
     # 进阶任务专属覆盖的歌曲 ID（留空继承 playids.ids，支持并集去重合并）
@@ -184,11 +188,11 @@ musician:
     gap_max: 0
 
 # 乐迷团任务配置 (音乐合伙人的乐迷团)
-fansGroup:
+fansgroup:
   # 是否启用主账号执行乐迷团任务
   enableMain: true
   # 是否启用辅助账号执行乐迷团任务
-  enableSecondaries: false
+  enableSecondaries: true
   # 乐迷团发布笔记后是否自动删除（留空则继承 note.autoDelete 配置）
   # autoDeleteNote: true
 
@@ -200,10 +204,12 @@ task:
   sign: true
   # 是否在批量执行中包含播放指定歌曲任务
   playids: true
-  # 是否在批量执行中包含音乐人日常与VIP进阶任务
-  musician: false
+  # 是否在批量执行中包含音乐人日常签到任务（每日）
+  musician-sign: true
+  # 是否在批量执行中包含音乐人VIP进阶任务（每月）
+  musician-vip: false
   # 是否在批量执行中包含自动发布/删除图文笔记任务
   note: false
   # 是否在批量执行中包含乐迷团任务
-  fansGroup: true
+  fansgroup: true
 

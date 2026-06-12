@@ -15,6 +15,7 @@ import (
 	"github.com/3899/ncmm/api/eapi"
 	"github.com/3899/ncmm/api/weapi"
 	"github.com/3899/ncmm/config"
+	"github.com/3899/ncmm/pkg/database"
 	"github.com/3899/ncmm/pkg/log"
 
 	"github.com/spf13/cobra"
@@ -35,19 +36,12 @@ func NewMusician(root *Root, l *log.Logger) *Musician {
 		cmd: &cobra.Command{
 			Use:     "musician",
 			Short:   "[need login] Auto-complete musician daily check-ins and VIP tasks",
-			Example: "  ncmm musician",
+			Example: "  ncmm musician\n  ncmm musician-sign\n  ncmm musician-vip",
 		},
 	}
 	c.cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return c.execute(cmd.Context())
 	}
-	c.cmd.AddCommand(&cobra.Command{
-		Use:   "note",
-		Short: "测试单独发布图文笔记",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.testNoteTask(cmd.Context())
-		},
-	})
 	return c
 }
 
@@ -65,6 +59,176 @@ func (c *Musician) Add(command ...*cobra.Command) {
 func (c *Musician) Command() *cobra.Command {
 	return c.cmd
 }
+
+// SignCommand 返回顶级命令 ncmm musician-sign
+func (c *Musician) SignCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "musician-sign",
+		Short:   "[need login] Execute musician daily sign-in and claim cloud beans (daily task)",
+		Example: "  ncmm musician-sign",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.executeSign(cmd.Context())
+		},
+	}
+}
+
+// VipCommand 返回顶级命令 ncmm musician-vip
+func (c *Musician) VipCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "musician-vip",
+		Short:   "[need login] Execute musician VIP advanced tasks: publish notes & relay play (monthly task)",
+		Example: "  ncmm musician-vip",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return c.executeVip(cmd.Context())
+		},
+	}
+}
+
+// ==================== 身份缓存逻辑 ====================
+
+// musicianIdentityCacheKey 返回身份缓存的 badger key
+func musicianIdentityCacheKey(cookieFile string) string {
+	return fmt.Sprintf("musician:identity:%s", cookieFile)
+}
+
+// checkMusicianIdentityCache 检查本地缓存的音乐人身份状态
+// 返回: (isMusician, cacheHit, error)
+func (c *Musician) checkMusicianIdentityCache(ctx context.Context, db database.Database, cookieFile string) (bool, bool, error) {
+	cacheDays := c.root.Cfg.Musician.IdentityCacheDays
+
+	// -1 = 关闭缓存，始终走 API
+	if cacheDays != nil && *cacheDays == -1 {
+		return false, false, nil
+	}
+
+	cached, err := db.Get(ctx, musicianIdentityCacheKey(cookieFile))
+	if err != nil {
+		// 缓存未命中（key not found 或其他错误）
+		return false, false, nil
+	}
+
+	// 缓存命中
+	return cached == "1", true, nil
+}
+
+// saveMusicianIdentityCache 保存音乐人身份状态到本地缓存
+func (c *Musician) saveMusicianIdentityCache(ctx context.Context, db database.Database, cookieFile string, isMusician bool) {
+	cacheDays := c.root.Cfg.Musician.IdentityCacheDays
+	if cacheDays != nil && *cacheDays == -1 {
+		return // 缓存已关闭
+	}
+
+	value := "0"
+	if isMusician {
+		value = "1"
+	}
+
+	if cacheDays != nil && *cacheDays > 0 {
+		ttl := time.Duration(*cacheDays) * 24 * time.Hour
+		if err := db.Set(ctx, musicianIdentityCacheKey(cookieFile), value, ttl); err != nil {
+			log.Warn("[musician] 写入身份缓存失败: %s", err)
+		}
+	} else {
+		// 0 = 永久有效
+		if err := db.Set(ctx, musicianIdentityCacheKey(cookieFile), value); err != nil {
+			log.Warn("[musician] 写入身份缓存失败: %s", err)
+		}
+	}
+}
+
+// ==================== 公共初始化 ====================
+
+// musicianContext 保存单次执行所需的公共上下文
+type musicianContext struct {
+	cli      *api.Client
+	eapiCli  *eapi.Api
+	weapiCli *weapi.Api
+	db       database.Database
+	resp     *eapi.MusicianVipTasksResp // 可能为 nil（当缓存命中且仅执行 sign 时）
+}
+
+// initMusicianContext 初始化客户端并检查音乐人身份（优先读缓存）
+// needVipData: true 表示需要 VIP 任务进度数据（vip 子命令或完整执行时需要）
+func (c *Musician) initMusicianContext(ctx context.Context, cookieFile string, needVipData bool) (*musicianContext, error) {
+	absPath, err := filepath.Abs(cookieFile)
+	if err != nil {
+		return nil, fmt.Errorf("解析 cookie 路径失败: %w", err)
+	}
+
+	// 初始化网络客户端
+	networkCfg := *c.root.Cfg.Network
+	networkCfg.Cookie.Filepath = absPath
+	cli, err := api.NewClient(&networkCfg, c.l)
+	if err != nil {
+		return nil, fmt.Errorf("实例化客户端失败: %w", err)
+	}
+
+	// 初始化数据库
+	db, err := database.New(c.root.Cfg.Database)
+	if err != nil {
+		cli.Close(ctx)
+		return nil, fmt.Errorf("本地数据库初始化失败: %w", err)
+	}
+
+	mctx := &musicianContext{
+		cli:      cli,
+		eapiCli:  eapi.New(cli),
+		weapiCli: weapi.New(cli),
+		db:       db,
+	}
+
+	// 检查身份缓存
+	isMusician, cacheHit, _ := c.checkMusicianIdentityCache(ctx, db, cookieFile)
+
+	if cacheHit && !isMusician {
+		// 缓存命中且非音乐人 → 直接返回错误
+		mctx.close(ctx)
+		return nil, fmt.Errorf("当前账号不是音乐人 (来自身份缓存)")
+	}
+
+	if cacheHit && !needVipData {
+		// 缓存命中且只需 sign（不需要 VIP 任务进度）→ 跳过 API 调用
+		c.cmd.Println("  ✅ 已认证音乐人 (来自身份缓存)")
+		return mctx, nil
+	}
+
+	// 缓存未命中或需要 VIP 数据 → 调用 API
+	c.cmd.Println("  👉 检查任务状态...")
+	resp, err := mctx.eapiCli.MusicianVipTasks(ctx, &eapi.MusicianVipTasksReq{ER: false})
+	if err != nil {
+		mctx.close(ctx)
+		return nil, fmt.Errorf("MusicianVipTasks: %w", err)
+	}
+	if resp.Code != 200 {
+		mctx.close(ctx)
+		return nil, fmt.Errorf("MusicianVipTasks error: code=%d msg=%s", resp.Code, resp.Message)
+	}
+
+	// 写入身份缓存
+	c.saveMusicianIdentityCache(ctx, db, cookieFile, resp.Data.IsMusician)
+
+	if !resp.Data.IsMusician {
+		mctx.close(ctx)
+		return nil, fmt.Errorf("当前账号不是音乐人")
+	}
+
+	c.cmd.Printf("  ✅ 已认证音乐人 | 维持天数: %d 天 | 近30天播放: %d 次 | 解锁VIP权益: %v\n",
+		resp.Data.MaintainDays, resp.Data.RecentPlayCount30, resp.Data.UnlockVipRight)
+
+	mctx.resp = resp
+	return mctx, nil
+}
+
+func (mc *musicianContext) close(ctx context.Context) {
+	if mc.db != nil {
+		mc.db.Close(ctx)
+	}
+	if mc.cli != nil {
+		mc.cli.Close(ctx)
+	}
+}
+
+// ==================== execute: 向后兼容，执行 sign + vip ====================
 
 func (c *Musician) execute(ctx context.Context) error {
 	if err := c.validate(); err != nil {
@@ -118,47 +282,164 @@ func (c *Musician) execute(ctx context.Context) error {
 	return nil
 }
 
+// runMusicianForCookie 执行单个账号的完整音乐人任务（sign + vip），单次 API 调用
 func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, isPrimary bool) error {
-	absPath, err := filepath.Abs(cookieFile)
+	mctx, err := c.initMusicianContext(ctx, cookieFile, true)
 	if err != nil {
-		return fmt.Errorf("解析 cookie 路径失败: %w", err)
+		return err
+	}
+	defer mctx.close(ctx)
+
+	// 第一阶段：音乐人日常任务
+	c.doSignPhase(ctx, mctx, cookieFile)
+
+	// 第二阶段：音乐人 VIP 任务
+	c.doVipPhase(ctx, mctx, cookieFile)
+
+	return nil
+}
+
+// ==================== executeSign: 仅日常签到 ====================
+
+func (c *Musician) executeSign(ctx context.Context) error {
+	if err := c.validate(); err != nil {
+		return fmt.Errorf("validate: %w", err)
 	}
 
-	// 复制并重构 Cookie 路径
-	networkCfg := *c.root.Cfg.Network
-	networkCfg.Cookie.Filepath = absPath
+	cfg := c.root.Cfg
+	if cfg.Accounts == nil {
+		return fmt.Errorf("配置文件中缺少 accounts 账号节点")
+	}
 
-	cli, err := api.NewClient(&networkCfg, c.l)
+	var hasExecuted bool
+
+	// 1. 主账号
+	if cfg.Musician != nil && cfg.Musician.EnableMain && cfg.Accounts.Main != "" {
+		c.cmd.Printf("[musician sign] >>>>>> 开始主账号音乐人日常签到 (%s) <<<<<<\n", cfg.Accounts.Main)
+		if err := c.runSignForCookie(ctx, cfg.Accounts.Main); err != nil {
+			c.cmd.Printf("[musician sign] ❌ 主账号签到失败: %s\n", err)
+		}
+		hasExecuted = true
+	} else {
+		if cfg.Musician != nil && !cfg.Musician.EnableMain {
+			c.cmd.Println("[musician sign] 提示: 主账号音乐人任务已在配置文件中关闭 (enableMain = false)")
+		} else if cfg.Accounts == nil || cfg.Accounts.Main == "" {
+			c.cmd.Println("[musician sign] 提示: 主账号音乐人任务未执行，因为未配置主账号 (accounts.main)")
+		}
+	}
+
+	// 2. 辅助账号
+	if cfg.Musician != nil && cfg.Musician.EnableSecondaries && len(cfg.Accounts.Secondary) > 0 {
+		for _, secCookie := range cfg.Accounts.Secondary {
+			c.cmd.Printf("[musician sign] >>>>>> 开始辅助账号音乐人日常签到 (%s) <<<<<<\n", secCookie)
+			if err := c.runSignForCookie(ctx, secCookie); err != nil {
+				c.cmd.Printf("[musician sign] ❌ 辅助账号签到失败: %s\n", err)
+			}
+			hasExecuted = true
+		}
+	} else {
+		if cfg.Musician != nil && !cfg.Musician.EnableSecondaries {
+			c.cmd.Println("[musician sign] 提示: 辅助账号音乐人任务已在配置文件中关闭 (enableSecondaries = false)")
+		} else if cfg.Accounts == nil || len(cfg.Accounts.Secondary) == 0 {
+			c.cmd.Println("[musician sign] 提示: 辅助账号音乐人任务未执行，因为未配置辅助账号 (accounts.secondary)")
+		}
+	}
+
+	if !hasExecuted {
+		c.cmd.Println("[musician sign] 未启用或未配置任何账号进行音乐人签到，请检查 config.yaml")
+	} else {
+		c.cmd.Println("[musician sign] 所有音乐人日常签到任务执行完毕！")
+	}
+	return nil
+}
+
+// runSignForCookie 执行单个账号的音乐人日常签到
+func (c *Musician) runSignForCookie(ctx context.Context, cookieFile string) error {
+	mctx, err := c.initMusicianContext(ctx, cookieFile, false)
 	if err != nil {
-		return fmt.Errorf("实例化客户端失败: %w", err)
+		return err
 	}
-	defer cli.Close(ctx)
+	defer mctx.close(ctx)
 
-	eapiCli := eapi.New(cli)
+	c.doSignPhase(ctx, mctx, cookieFile)
+	return nil
+}
 
-	// 获取音乐人黑胶会员任务状态
-	c.cmd.Println("  👉 检查任务状态...")
-	resp, err := eapiCli.MusicianVipTasks(ctx, &eapi.MusicianVipTasksReq{ER: false})
+// ==================== executeVip: 仅 VIP 进阶任务 ====================
+
+func (c *Musician) executeVip(ctx context.Context) error {
+	if err := c.validate(); err != nil {
+		return fmt.Errorf("validate: %w", err)
+	}
+
+	cfg := c.root.Cfg
+	if cfg.Accounts == nil {
+		return fmt.Errorf("配置文件中缺少 accounts 账号节点")
+	}
+
+	var hasExecuted bool
+
+	// 1. 主账号
+	if cfg.Musician != nil && cfg.Musician.EnableMain && cfg.Accounts.Main != "" {
+		c.cmd.Printf("[musician vip] >>>>>> 开始主账号音乐人VIP进阶任务 (%s) <<<<<<\n", cfg.Accounts.Main)
+		if err := c.runVipForCookie(ctx, cfg.Accounts.Main); err != nil {
+			c.cmd.Printf("[musician vip] ❌ 主账号VIP任务失败: %s\n", err)
+		}
+		hasExecuted = true
+	} else {
+		if cfg.Musician != nil && !cfg.Musician.EnableMain {
+			c.cmd.Println("[musician vip] 提示: 主账号音乐人任务已在配置文件中关闭 (enableMain = false)")
+		} else if cfg.Accounts == nil || cfg.Accounts.Main == "" {
+			c.cmd.Println("[musician vip] 提示: 主账号音乐人任务未执行，因为未配置主账号 (accounts.main)")
+		}
+	}
+
+	// 2. 辅助账号
+	if cfg.Musician != nil && cfg.Musician.EnableSecondaries && len(cfg.Accounts.Secondary) > 0 {
+		for _, secCookie := range cfg.Accounts.Secondary {
+			c.cmd.Printf("[musician vip] >>>>>> 开始辅助账号音乐人VIP进阶任务 (%s) <<<<<<\n", secCookie)
+			if err := c.runVipForCookie(ctx, secCookie); err != nil {
+				c.cmd.Printf("[musician vip] ❌ 辅助账号VIP任务失败: %s\n", err)
+			}
+			hasExecuted = true
+		}
+	} else {
+		if cfg.Musician != nil && !cfg.Musician.EnableSecondaries {
+			c.cmd.Println("[musician vip] 提示: 辅助账号音乐人任务已在配置文件中关闭 (enableSecondaries = false)")
+		} else if cfg.Accounts == nil || len(cfg.Accounts.Secondary) == 0 {
+			c.cmd.Println("[musician vip] 提示: 辅助账号音乐人任务未执行，因为未配置辅助账号 (accounts.secondary)")
+		}
+	}
+
+	if !hasExecuted {
+		c.cmd.Println("[musician vip] 未启用或未配置任何账号进行音乐人VIP任务，请检查 config.yaml")
+	} else {
+		c.cmd.Println("[musician vip] 所有音乐人VIP进阶任务执行完毕！")
+	}
+	return nil
+}
+
+// runVipForCookie 执行单个账号的音乐人 VIP 进阶任务
+func (c *Musician) runVipForCookie(ctx context.Context, cookieFile string) error {
+	mctx, err := c.initMusicianContext(ctx, cookieFile, true)
 	if err != nil {
-		return fmt.Errorf("MusicianVipTasks: %w", err)
+		return err
 	}
-	if resp.Code != 200 {
-		return fmt.Errorf("MusicianVipTasks error: code=%d msg=%s", resp.Code, resp.Message)
-	}
-	if !resp.Data.IsMusician {
-		return fmt.Errorf("当前账号不是音乐人")
-	}
+	defer mctx.close(ctx)
 
-	c.cmd.Printf("  ✅ 已认证音乐人 | 维持天数: %d 天 | 近30天播放: %d 次 | 解锁VIP权益: %v\n",
-		resp.Data.MaintainDays, resp.Data.RecentPlayCount30, resp.Data.UnlockVipRight)
+	c.doVipPhase(ctx, mctx, cookieFile)
+	return nil
+}
 
-	// ==================== 第一阶段：音乐人日常任务 ====================
+// ==================== 任务执行阶段 ====================
+
+// doSignPhase 执行第一阶段：音乐人日常签到 + 领云豆
+func (c *Musician) doSignPhase(ctx context.Context, mctx *musicianContext, cookieFile string) {
 	c.cmd.Println("  👉 [第一阶段] 开始执行音乐人日常任务 (日常签到与云豆领奖)...")
-	weapiApi := weapi.New(cli)
 
 	// 1. 音乐人日常签到
 	c.cmd.Println("    👉 开始音乐人日常签到...")
-	signResp, err := weapiApi.MusicianSign(ctx, &weapi.MusicianSignReq{})
+	signResp, err := mctx.weapiCli.MusicianSign(ctx, &weapi.MusicianSignReq{})
 	if err != nil {
 		c.cmd.Printf("    ❌ 音乐人日常签到失败: %v\n", err)
 	} else if signResp.Code == 200 {
@@ -169,11 +450,11 @@ func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, 
 
 	// 2. 领取音乐人周期/阶段任务云豆奖励
 	var allTasks []weapi.MusicianTask
-	cycleTasks, err := weapiApi.MusicianTasks(ctx, &weapi.MusicianTasksReq{})
+	cycleTasks, err := mctx.weapiCli.MusicianTasks(ctx, &weapi.MusicianTasksReq{})
 	if err == nil && cycleTasks.Code == 200 {
 		allTasks = append(allTasks, cycleTasks.Data.TaskList...)
 	}
-	stageTasks, err := weapiApi.MusicianTasksNew(ctx, &weapi.MusicianTasksNewReq{})
+	stageTasks, err := mctx.weapiCli.MusicianTasksNew(ctx, &weapi.MusicianTasksNewReq{})
 	if err == nil && stageTasks.Code == 200 {
 		allTasks = append(allTasks, stageTasks.Data.TaskList...)
 	}
@@ -186,7 +467,7 @@ func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, 
 			if task.Status == 2 || (task.UserMissionId > 0 && task.CurrentProgress >= task.TargetWorth && task.TargetWorth > 0) {
 				id := fmt.Sprintf("%d", task.UserMissionId)
 				period := fmt.Sprintf("%d", task.Period)
-				reward, err := weapiApi.MusicianCloudbeanObtain(ctx, &weapi.MusicianCloudbeanObtainReq{UserMissionId: id, Period: period})
+				reward, err := mctx.weapiCli.MusicianCloudbeanObtain(ctx, &weapi.MusicianCloudbeanObtainReq{UserMissionId: id, Period: period})
 				if err != nil {
 					c.cmd.Printf("      ❌ 领取云豆失败 [%s]: %v\n", task.Name, err)
 				} else if reward.Code == 200 {
@@ -201,21 +482,23 @@ func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, 
 	} else {
 		c.cmd.Println("    ℹ️ 暂无音乐人周期/阶段任务奖励")
 	}
+}
 
-	// ==================== 第二阶段：音乐人 VIP 任务 ====================
-	if resp.Data.FurtherTask == nil {
+// doVipPhase 执行第二阶段：音乐人 VIP 进阶任务
+func (c *Musician) doVipPhase(ctx context.Context, mctx *musicianContext, cookieFile string) {
+	if mctx.resp == nil || mctx.resp.Data.FurtherTask == nil {
 		c.cmd.Println("  👉 [第二阶段] 提示: 没有音乐人 VIP 进阶任务 (跳过)")
-		return nil
+		return
 	}
 
 	c.cmd.Printf("  👉 [第二阶段] 开始执行音乐人 VIP 任务 (发布笔记与接力刷歌)... 进度: %d/%d 完成\n",
-		resp.Data.FurtherTask.ProgressRate, resp.Data.FurtherTask.TotalCompleteNum)
+		mctx.resp.Data.FurtherTask.ProgressRate, mctx.resp.Data.FurtherTask.TotalCompleteNum)
 
 	// 遍历子任务，检查并执行
-	for _, sub := range resp.Data.FurtherTask.Children {
+	for _, sub := range mctx.resp.Data.FurtherTask.Children {
 		progress := sub.ProgressRate
 		if sub.MissionCode == "mission_code_recently_play_count" {
-			progress = resp.Data.RecentPlayCount30
+			progress = mctx.resp.Data.RecentPlayCount30
 		}
 		c.cmd.Printf("    - 任务: %-15s — 状态: %d, 进度: %d/%d\n",
 			sub.Name, sub.MissionStatus, progress, sub.TotalCompleteNum)
@@ -227,7 +510,9 @@ func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, 
 
 		switch sub.MissionCode {
 		case "mission_code_musician_notebook_publish":
-			if sub.ProgressRate >= sub.TotalCompleteNum {
+			if c.root.Cfg.Musician.EnableVipNote != nil && !*c.root.Cfg.Musician.EnableVipNote {
+				c.cmd.Println("    ℹ️ 笔记任务已在配置中关闭 (enableVipNote = false)，跳过")
+			} else if sub.ProgressRate >= sub.TotalCompleteNum {
 				c.cmd.Println("    ℹ️ 笔记任务已完成，无需发布")
 			} else {
 				c.cmd.Println("    👉 处理笔记任务...")
@@ -240,7 +525,9 @@ func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, 
 			}
 
 		case "mission_code_recently_play_count":
-			if err := c.handlePlayTask(ctx, cli, sub, resp.Data.RecentPlayCount30); err != nil {
+			if c.root.Cfg.Musician.EnableVipPlay != nil && !*c.root.Cfg.Musician.EnableVipPlay {
+				c.cmd.Println("    ℹ️ 播放任务已在配置中关闭 (enableVipPlay = false)，跳过")
+			} else if err := c.handlePlayTask(ctx, mctx.cli, sub, mctx.resp.Data.RecentPlayCount30); err != nil {
 				log.Error("    ❌ 播放任务执行失败: %s", err)
 				c.cmd.Printf("    ❌ 播放任务失败: %s\n", err)
 			}
@@ -249,8 +536,6 @@ func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, 
 			c.cmd.Printf("    ⚠️ 未知任务类型: %s\n", sub.MissionCode)
 		}
 	}
-
-	return nil
 }
 
 // handlePlayTask 处理播放任务
@@ -368,7 +653,7 @@ func (c *Musician) handlePlayTask(ctx context.Context, cli *api.Client, sub eapi
 			CookieFile: currentAccount,
 		}
 
-		// 执行单账号播放打卡，返回该账号实际成功播放的“主歌”数量
+		// 执行单账号播放打卡，返回该账号实际成功播放的"主歌"数量
 		effectivePlayed, err := p.executeForCookie(ctx, currentAccount, playCandidateIdsSource(cfg.IDs, cfg.IDsFile, rootPlayCfg))
 		if err != nil {
 			c.cmd.Printf("    [WARN] 账号 (%s) 运行异常: %s，正准备交由下一辅助号...\n", currentAccount, err)
@@ -388,13 +673,6 @@ func (c *Musician) handlePlayTask(ctx context.Context, cli *api.Client, sub eapi
 	}
 
 	return nil
-}
-
-// testNoteTask 用于单独运行图文笔记任务的测试
-func (c *Musician) testNoteTask(ctx context.Context) error {
-	n := NewNote(c.root, c.l)
-	_, err := n.ExecuteForCookie(ctx, c.root.Cfg.Accounts.Main)
-	return err
 }
 
 // playCandidateIdsSource 构建并集歌池传递给 executeForCookie 判定有效主歌上报
