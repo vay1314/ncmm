@@ -74,11 +74,7 @@ func (c *loginPhoneCmd) execute(ctx context.Context, args []string) error {
 			if home == "" {
 				home = config.HomeDir
 			}
-			home = filepath.Clean(home)
-			if home == filepath.Clean(config.HomeDir) {
-				home = filepath.Join(home, ".ncmm")
-			}
-			targetDir = home
+			targetDir = filepath.Clean(home)
 		}
 		tempCookieFile = filepath.Join(targetDir, "temp_cookie.json")
 		networkCfgCopy := *networkCfg

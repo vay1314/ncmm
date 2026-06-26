@@ -1,0 +1,51 @@
+services:
+  ncmm:
+    build: .
+    image: ghcr.io/3899/ncmm:latest
+    container_name: ncmm
+    restart: "no"
+    network_mode: host
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=Asia/Shanghai
+      # CookieCloud 配置（按实际情况修改）
+      - COOKIECLOUD_SERVER=http://127.0.0.1:8088
+      - COOKIECLOUD_UUID=your-uuid
+      - COOKIECLOUD_PASSWORD=your-password
+
+      # 方式一：使用环境变量配置定时规则（适合 docker run 或部分 GUI 容器管理器部署，支持多重配置）
+      - CRON_1=30 8 * * * task
+      # - CRON_1=30 10 * * * sign
+      # - CRON_2=0 14 * * * musician
+      # - CRON_3=0 22 * * * playids --ids 12345
+
+    # 方式二：使用 command 传参（适合 Docker Compose 部署，推荐此方式，直接在行首加 # 即可注释规则）
+    # command:
+    #   - cron
+    #   - |
+    #     30 8 * * * sign
+    #     0 14 * * * musician
+    #     0 22 * * * playids --ids 12345
+
+# ============================================================
+# 使用说明:
+#
+# 1. 根据需要修改上方 environment 中的 CookieCloud 配置或定时任务。
+#
+# 2. 启用定时托管模式（容器后台常驻）：
+#    在上方配置好 CRON 环境变量（方式一）或启用 command（方式二），
+#    并将 restart 修改为 always，然后运行：
+#
+#    docker compose up -d
+#
+# 3. 临时运行一次特定任务：
+#
+#    docker compose run --rm ncmm task              # 批量运行所有配置任务
+#    docker compose run --rm ncmm sign              # 只签到
+#    docker compose run --rm ncmm playids --ids 123 # 只播放指定歌曲
+#    docker compose run --rm ncmm musician          # 音乐人日常任务
+#    docker compose run --rm ncmm fansgroup         # 乐迷团任务
+#    docker compose run --rm ncmm --help            # 查看帮助说明
+#
+# ============================================================

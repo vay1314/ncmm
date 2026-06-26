@@ -269,11 +269,7 @@ func (c *loginCookieCmd) execute(ctx context.Context, args []string) error {
 				if home == "" {
 					home = config.HomeDir
 				}
-				home = filepath.Clean(home)
-				if home == filepath.Clean(config.HomeDir) {
-					home = filepath.Join(home, ".ncmm")
-				}
-				defaultDir = home
+				defaultDir = filepath.Clean(home)
 			}
 			outputPath = filepath.Join(defaultDir, outputPath)
 		}
@@ -287,11 +283,7 @@ func (c *loginCookieCmd) execute(ctx context.Context, args []string) error {
 			if home == "" {
 				home = config.HomeDir
 			}
-			home = filepath.Clean(home)
-			if home == filepath.Clean(config.HomeDir) {
-				home = filepath.Join(home, ".ncmm")
-			}
-			defaultDir = home
+			defaultDir = filepath.Clean(home)
 		}
 		tempCookieFile = filepath.Join(defaultDir, "temp_cookie.json")
 		outputPath = tempCookieFile

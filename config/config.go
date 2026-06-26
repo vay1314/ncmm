@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -29,9 +30,16 @@ var (
 
 func init() {
 	var err error
-	HomeDir, err = os.UserHomeDir()
-	if err != nil {
-		panic(err)
+	if os.Getenv("NCMM_DOCKER_OFFICIAL") == "1" {
+		HomeDir = "/data"
+	} else {
+		var exePath string
+		exePath, err = os.Executable()
+		if err == nil {
+			HomeDir = filepath.Dir(exePath)
+		} else {
+			HomeDir = "."
+		}
 	}
 	if err := yaml.Unmarshal(defaultConfigByte, &defaultConfig); err != nil {
 		panic(fmt.Sprintf("defaultConfig.Unmarshal: %s", err))
@@ -127,6 +135,11 @@ type PlayIdsConfig struct {
 	EnableSecondaries bool          `json:"enableSecondaries" yaml:"enableSecondaries"`
 }
 
+type UpdaterConf struct {
+	Check      *bool `json:"check" yaml:"check"`
+	AutoUpdate *bool `json:"auto_update" yaml:"auto_update"`
+}
+
 type Config struct {
 	v           *viper.Viper
 	Version     string           `json:"version" yaml:"version"`
@@ -141,6 +154,7 @@ type Config struct {
 	Musician  *MusicianConf  `json:"musician" yaml:"musician"`
 	FansGroup *FansGroupConf `json:"fansgroup" yaml:"fansgroup"`
 	Task      *TaskConf      `json:"task" yaml:"task"`
+	Updater   *UpdaterConf     `json:"updater" yaml:"updater"`
 }
 
 // MusicianConf 音乐人任务配置
@@ -175,6 +189,18 @@ type MusicianPlayConf struct {
 }
 
 func (c *Config) Validate() error {
+	if c.Updater == nil {
+		c.Updater = &UpdaterConf{}
+	}
+	if c.Updater.Check == nil {
+		chk := true
+		c.Updater.Check = &chk
+	}
+	if c.Updater.AutoUpdate == nil {
+		auto := false
+		c.Updater.AutoUpdate = &auto
+	}
+
 	if c.Accounts != nil {
 		if c.Accounts.Main == "" && c.Accounts.Primary != "" {
 			c.Accounts.Main = c.Accounts.Primary
@@ -360,6 +386,98 @@ func (c *Config) syncMainCookie() {
 	if c.Accounts != nil && c.Accounts.Main != "" {
 		if c.Network != nil {
 			c.Network.Cookie.Filepath = c.Accounts.Main
+		}
+	}
+}
+
+type verStruct struct {
+	Version string `yaml:"version"`
+}
+
+// AutoUpgradeConfigIfNeeded 检查配置文件版本，并在版本不符时自动执行迁移和结构升级合并
+func AutoUpgradeConfigIfNeeded(cfgPath string) error {
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return err
+	}
+	var v verStruct
+	_ = yaml.Unmarshal(data, &v)
+
+	if v.Version != defaultConfig.Version {
+		// 先执行原有的字段名重命名迁移
+		_ = MigrateConfigFile(cfgPath)
+		// 再执行 AST 级的新配置模板字段与注释合并升级
+		return AutoUpgradeConfig(cfgPath)
+	}
+	return nil
+}
+
+// AutoUpgradeConfig 读取旧配置文件，将其与嵌入的新配置模板进行 AST 级递归合并，保存最新结构与中文注释的同时保留用户值
+func AutoUpgradeConfig(cfgPath string) error {
+	userData, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return err
+	}
+
+	var userRoot yaml.Node
+	if err := yaml.Unmarshal(userData, &userRoot); err != nil {
+		return err
+	}
+
+	var defaultRoot yaml.Node
+	if err := yaml.Unmarshal(defaultConfigByte, &defaultRoot); err != nil {
+		return err
+	}
+
+	if len(defaultRoot.Content) > 0 && len(userRoot.Content) > 0 {
+		mergeYAMLNodes(defaultRoot.Content[0], userRoot.Content[0])
+	}
+
+	output, err := yaml.Marshal(&defaultRoot)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(cfgPath, output, 0644)
+}
+
+func mergeYAMLNodes(dest, src *yaml.Node) {
+	if dest.Kind != src.Kind {
+		return
+	}
+	switch dest.Kind {
+	case yaml.DocumentNode:
+		if len(dest.Content) > 0 && len(src.Content) > 0 {
+			mergeYAMLNodes(dest.Content[0], src.Content[0])
+		}
+	case yaml.MappingNode:
+		for i := 0; i < len(dest.Content); i += 2 {
+			destKey := dest.Content[i].Value
+			destVal := dest.Content[i+1]
+
+			var srcVal *yaml.Node
+			for j := 0; j < len(src.Content); j += 2 {
+				if src.Content[j].Value == destKey {
+					srcVal = src.Content[j+1]
+					break
+				}
+			}
+
+			if srcVal != nil {
+				if destKey == "version" {
+					continue
+				}
+				if destVal.Kind == yaml.MappingNode && srcVal.Kind == yaml.MappingNode {
+					mergeYAMLNodes(destVal, srcVal)
+				} else if destVal.Kind == yaml.SequenceNode && srcVal.Kind == yaml.SequenceNode {
+					destVal.Content = srcVal.Content
+				} else {
+					destVal.Value = srcVal.Value
+					destVal.Tag = srcVal.Tag
+					destVal.Kind = srcVal.Kind
+					destVal.Content = srcVal.Content
+				}
+			}
 		}
 	}
 }

@@ -65,11 +65,7 @@ func (c *Login) saveLoginResult(ctx context.Context, nickname string, uid int64,
 		if home == "" {
 			home = config.HomeDir
 		}
-		home = filepath.Clean(home)
-		if home == filepath.Clean(config.HomeDir) {
-			home = filepath.Join(home, ".ncmm")
-		}
-		targetDir = home
+		targetDir = filepath.Clean(home)
 	}
 
 	var finalPath string

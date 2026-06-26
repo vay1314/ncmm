@@ -369,13 +369,13 @@ func (c *Task) execute(ctx context.Context) error {
 		if runFast {
 			c.cmd.Println("[task] >>>>>> 开始执行 [快任务组] (跨账号串行) <<<<<<")
 			c.runQueue(ctx, fastQueue, accounts, activeTasks)
-			c.cmd.Println("[task] >>>>>> [快任务组] 执行完毕 <<<<<<\n")
+			c.cmd.Printf("[task] >>>>>> [快任务组] 执行完毕 <<<<<<\n\n")
 		}
 
 		if runSlow {
 			c.cmd.Println("[task] >>>>>> 开始执行 [慢任务组] (跨账号串行) <<<<<<")
 			c.runQueue(ctx, slowQueue, accounts, activeTasks)
-			c.cmd.Println("[task] >>>>>> [慢任务组] 执行完毕 <<<<<<\n")
+			c.cmd.Printf("[task] >>>>>> [慢任务组] 执行完毕 <<<<<<\n\n")
 		}
 	} else if mode == "by-account" {
 		for _, account := range accounts {

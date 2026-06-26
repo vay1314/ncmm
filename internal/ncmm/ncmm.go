@@ -25,11 +25,12 @@ type RootOpts struct {
 }
 
 type Root struct {
-	Cfg     *config.Config
-	CfgPath string
-	Opts    RootOpts
-	cmd     *cobra.Command
-	l       *log.Logger
+	Cfg        *config.Config
+	CfgPath    string
+	Opts       RootOpts
+	cmd        *cobra.Command
+	l          *log.Logger
+	AppVersion string
 }
 
 func New() *Root {
@@ -53,8 +54,8 @@ func New() *Root {
 				return fmt.Errorf("config file not exists: %s", c.Opts.Config)
 			}
 			c.CfgPath = c.Opts.Config
-			if err := config.MigrateConfigFile(c.CfgPath); err != nil {
-				return fmt.Errorf("migrate config file error: %w", err)
+			if err := config.AutoUpgradeConfigIfNeeded(c.CfgPath); err != nil {
+				return fmt.Errorf("upgrade config file error: %w", err)
 			}
 			c.Cfg, err = config.New(c.CfgPath)
 			if err != nil {
@@ -65,8 +66,8 @@ func New() *Root {
 			if utils.FileExists(autoCfgPath) {
 				var err error
 				c.CfgPath = autoCfgPath
-				if err := config.MigrateConfigFile(c.CfgPath); err != nil {
-					return fmt.Errorf("migrate config file error: %w", err)
+				if err := config.AutoUpgradeConfigIfNeeded(c.CfgPath); err != nil {
+					return fmt.Errorf("upgrade config file error: %w", err)
 				}
 				c.Cfg, err = config.New(autoCfgPath)
 				if err != nil {
@@ -96,9 +97,12 @@ func New() *Root {
 		c.l = log.New(c.Cfg.Log)
 		log.Default = c.l
 		log.Debug("[config] init home=%s path=%s log=%+v network=%+v", home, cfgPath, c.Cfg.Log, c.Cfg.Network)
+
+		c.CheckForUpdatesPreRun()
 		return nil
 	}
 	c.cmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
+		c.ShowUpdateNotificationPostRun()
 		return c.l.Close()
 	}
 
@@ -125,6 +129,7 @@ func (c *Root) addFlags() {
 }
 
 func (c *Root) Version(version, buildTime, commitHash string) {
+	c.AppVersion = version
 	c.cmd.Version = fmt.Sprintf("%s\n Version: \t%s\n Go version: \t%s\n Git commit: \t%s\n OS/Arch: \t%s\n Build time: \t%s",
 		title, version, runtime.Version(), commitHash, runtime.GOOS+"/"+runtime.GOARCH, buildTime)
 }

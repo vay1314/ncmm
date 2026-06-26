@@ -1,5 +1,5 @@
 # 配置文件版本
-version: 1.0
+version: 1.1.7
 
 # 顶级多账号管理
 accounts:
@@ -23,7 +23,7 @@ log:
   # 滚动日志配置
   rotate:
     # 日志文件保存路径
-    filename: "./log/ncm.log"
+    filename: "${HOME}/.ncmm/log/ncm.log"
     # 单个日志文件最大大小 (单位: MB)
     maxsize: 100
     # 日志文件保留天数
@@ -57,7 +57,7 @@ database:
   # 缓存驱动，目前仅支持 badger
   driver: badger
   # 缓存目录路径
-  path: "./database/badger/"
+  path: "${HOME}/.ncmm/database/badger/"
 
 # playids 播放指定歌曲配置
 playids:
@@ -80,7 +80,7 @@ playids:
   # 默认歌曲 ID 文件路径（支持本地路径与远程 http/https 链接，会与命令行参数指定的列表并集去重合并。支持单个字符串或数组列表形式的多源配置）
   # 示例 (多源配置):
   idsFile:
-    - "https://spoo.me/gtlf6x2"
+    - "https://mum.cc.cd/34p793j2"
     # - "local/ids.txt"
   # 播放账号控制（命令行参数未指定 --cookie-file 时生效）
 
@@ -135,7 +135,7 @@ note:
   # 动态发布标题列表文件路径 (支持本地路径与远程 http/https 链接，会与 titles 并集合并。支持单个字符串或数组列表形式的多源配置)
   # 示例 (多源配置):
   titlesFile:
-    - "https://spoo.me/uJx7s66"
+    - "https://mum.cc.cd/4pjvv5j7"
     # - "local/titles.txt"
   # 笔记文字内容。每次发布时会从中随机选择一条作为正文（若有 messagesFile 则会进行并集合并）
   messages:
@@ -148,7 +148,7 @@ note:
   # 动态发布文本列表文件路径 (支持本地路径与远程 http/https 链接，会与 messages 并集合并。支持单个字符串或数组列表形式的多源配置)
   # 示例 (多源配置):
   messagesFile:
-    - "https://spoo.me/IvmB1RC"
+    - "https://mum.cc.cd/457fuy38"
     # - "local/messages.txt"
   # 图片 URL 链接池。支持配置本地图片路径、直链，或本地及远程包含链接的文本列表（支持单个字符串或数组列表形式的多源配置。每次发布时会从中随机选择一个可用的图片并下载上传）
   # 示例 (多源配置):  
@@ -240,3 +240,9 @@ task:
     - playids              # 播放指定歌曲任务
     - musician-vip         # 音乐人VIP进阶任务 (含播放任务)
 
+# 自动更新与版本检测配置
+updater:
+  # 是否启用新版本检测与日志提醒（默认开启。每天最多请求一次 GitHub API）
+  check: true
+  # 是否在检测到新版本时自动下载并热替换二进制（默认开启。容器环境将自动忽略此项）
+  auto_update: true
