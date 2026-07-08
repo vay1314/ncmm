@@ -1,5 +1,5 @@
 # 配置文件版本
-version: 1.1.8
+version: 1.1.9
 
 # 顶级多账号管理
 accounts:
@@ -294,3 +294,9 @@ updater:
   check: true
   # 是否在检测到新版本时自动下载并热替换二进制（默认开启。容器环境将自动忽略此项）
   auto_update: true
+  # 代理镜像列表，由上至下顺序尝试直到成功。留空或未配置则使用内置默认列表。
+  # 系统会自动首先尝试直连，失败后才会按顺序尝试下方的代理镜像。
+  proxy_mirrors:
+    - "https://gh-proxy.com/"
+    - "https://ghproxy.net/"
+    - "https://githubproxy.cc/"

@@ -138,8 +138,9 @@ type PlayIdsConfig struct {
 }
 
 type UpdaterConf struct {
-	Check      *bool `json:"check" yaml:"check"`
-	AutoUpdate *bool `json:"auto_update" yaml:"auto_update"`
+	Check        *bool    `json:"check" yaml:"check"`
+	AutoUpdate   *bool    `json:"auto_update" yaml:"auto_update"`
+	ProxyMirrors []string `json:"proxy_mirrors" yaml:"proxy_mirrors"`
 }
 
 type Config struct {
@@ -235,6 +236,13 @@ func (c *Config) Validate() error {
 	if c.Updater.AutoUpdate == nil {
 		auto := false
 		c.Updater.AutoUpdate = &auto
+	}
+	if len(c.Updater.ProxyMirrors) == 0 {
+		c.Updater.ProxyMirrors = []string{
+			"https://gh-proxy.com/",
+			"https://ghproxy.net/",
+			"https://githubproxy.cc/",
+		}
 	}
 
 	if c.Accounts != nil {
