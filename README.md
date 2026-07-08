@@ -21,8 +21,17 @@
         src="https://img.shields.io/github/downloads/3899/ncmm/total?style=flat-square"
       />  
     </a>
+    <a href="https://github.com/3899/ncmm/pkgs/container/ncmm">
+      <img
+        src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2F3899%2Fncmm%2Fncmm&query=downloadCount&style=flat-square&logo=docker&label=Docker%20Pulls&color=2496ed"
+      />
+    </a>
+    <a href="https://github.com/3899/ncmm/pkgs/container/ncmm">
+      <img
+        src="https://ghcr-badge.egpl.dev/3899/ncmm/size?color=%23FF7F50&tag=latest&style=flat-square"
+      />
+    </a>
   </div>
-  
 </div>
 
 # 🎵 ncmm
@@ -86,7 +95,12 @@
 
 ### 👥 贡献者
 
-[crossgg](https://github.com/crossgg)
+感谢大家为 ncmm 做出的宝贵贡献！如果你也希望为 ncmm 做出贡献，请查阅 [贡献指南](./.github/CONTRIBUTING.md)。
+
+<a href="https://github.com/3899/ncmm/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=3899/ncmm" />
+</a>
+
 
 ### 📦 参考项目
 | 项目 | 说明 |
