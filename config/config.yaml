@@ -1,14 +1,22 @@
 # 配置文件版本
-version: 1.1.7
+version: 1.1.8
 
 # 顶级多账号管理
 accounts:
   # 音乐人主账号 Cookie 文件路径
   main: "./cookie.json"
-  # 辅助刷播放量账号 Cookie 列表
+  # 辅助账号 Cookie 列表
   secondary:
     - "./fan1.json"
     - "./fan2.json"
+  # 每个 Cookie 对应的移动端 X-antiCheatToken（从各自的移动端抓包获取，每个设备/账号唯一）
+  # 目前需要 antiCheatToken 的任务有：dailySongShare 和 vipMemberGift(领取)。
+  # 同时需要移动端 Cookie 和匹配的移动端 UA。没有配置 token 的账号会自动跳过需要该 token 的任务。
+  # iphone/ipad的UA填在network.user_agent.eapi； Android的UA两个都要填network.user_agent.xeapi、network.user_agent.eapi。
+  antiCheatTokens:
+    "./cookie.json": ""
+    # "./fan1.json": ""
+
 
 # log 日志模块配置
 log:
@@ -50,7 +58,9 @@ network:
     # Web网页端与PC桌面客户端（weapi协议接口）所使用的 User-Agent
     weapi: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) NeteaseMusicDesktop/2.3.17.1034"
     # 移动手机APP客户端（eapi协议接口，如音乐人做任务、防风控套件相关API）所使用的 User-Agent
-    eapi: "NeteaseMusic 9.4.95/6806 (iPhone; iOS 16.6.1; zh_CN)"
+    eapi: "neteasemusic/9.5.45 (iPhone; iOS 16.6.1; Scale/2.00)"
+    # XEAPI/AEAPI  Android 移动客户端 User-Agent。Android 每日推歌、Android vipMemberGift 需要填写抓包移动端 UA。
+    xeapi: ""
 
 # 数据缓存配置 (主要记录播放状态进度)
 database:
@@ -64,17 +74,17 @@ playids:
   enableMain: false      # 默认不启用主账号刷歌
   enableSecondaries: true   # 启用所有辅助账号刷歌
   # 每日播放歌曲随机下限 (每天首次启动时在此范围内随机生成当日上限目标)
-  daily_min: 50
+  daily_min: 40
   # 每日播放歌曲随机上限
-  daily_max: 200
+  daily_max: 100
   # 单次运行播放歌曲随机下限 (为 0 表示不限制，直到跑完今日剩余目标)
-  run_min: 0
+  run_min: 20
   # 单次运行播放歌曲随机上限
-  run_max: 0
+  run_max: 40
   # 播放间隔范围最小值（秒）
-  gap_min: 10
+  gap_min: 0
   # 播放间隔范围最大值（秒）
-  gap_max: 30
+  gap_max: 5
   # 默认歌曲 ID 池（会与命令行参数指定的列表进行并集去重合并）
   ids: "3366663042,3373818852,3373845775,3372894655,3372989897,3370932775,3370931988,3381788772,3372050296,3372046163"
   # 默认歌曲 ID 文件路径（支持本地路径与远程 http/https 链接，会与命令行参数指定的列表并集去重合并。支持单个字符串或数组列表形式的多源配置）
@@ -159,6 +169,58 @@ note:
   # 是否在笔记发布成功后自动删除（秒删），以保持个人主页整洁。默认开启
   autoDelete: true
 
+# 每日推歌发布配置
+# 重要：每日推歌需要使用同一移动端会话抓到的移动端 Cookie、匹配的移动端 UA 和 antiCheatToken。
+# Android Cookie 走 network.user_agent.xeapi；iPhone/iPad Cookie 走 network.user_agent.eapi。
+# antiCheatToken 为空时任务会直接跳过；Android 线 network.user_agent.xeapi 为空时会跳过。
+dailySongShare:
+  enableMain: true
+  enableSecondaries: false
+  songId: ""   # 指定歌曲 ID。留空时继续从 playlistId 随机选歌；填写后固定分享该歌曲。
+  playlistId: "13848930701" #音乐合伙人歌单
+  # 指定 songId 时不会额外读取歌单封面，playlistCover 会降级到歌曲封面。
+  imageMode: "songCover" # 可选：songCover / playlistCover / custom
+  imageUrls: []     # songCover是自动歌单封面
+  titleMode: "note" # 可选：note / song
+  titles: []
+#    - "今日推荐：{song}"
+#    - "分享一首值得听的歌"
+  titlesFile: []  #titles、titlesFile、messages、messagesFile留空沿用note任务配置
+  messages: []
+  messagesFile: []
+  autoDelete: true # 是否自动删除
+  # 发布时候带上的话题
+  topics:
+    - name: "音乐合伙人的乐迷团"
+      id: "13827903"
+      type: 3
+      subType: 11
+    - name: "申请音乐合伙人"
+      id: "195425749"
+      type: 2
+      subType: 0
+    - name: "音乐合伙人星探计划"
+      id: "200773579"
+      type: 2
+      subType: 0
+  ## 是否自动抽奖
+  lottery:
+    enabled: true
+    activityId: ""
+    autoRegister: true
+
+# 黑胶会员免费送任务配置
+# Android Cookie 会按 network.user_agent.xeapi 走 XEAPI；iPhone/iPad Cookie 会按 network.user_agent.eapi 走 EAPI。
+# 领取需要配置 accounts.antiCheatTokens 中对应的 token，赠送不需要。
+vipMemberGift:
+  enableMain: true         # 主号是否启用任务
+  enableSecondaries: false # 辅助账号是否启用任务
+  enableGift: true         # 是否发布赠送会员 token 到云端
+  enableClaim: true        # 是否从云端领取会员
+  cloud:
+    baseUrl: "" # 云端服务地址，留空使用作者云端共享库
+    token: "" # 云端服务token，留空使用作者云端共享库
+
 # 音乐人任务配置
 musician:
   # 是否启用主账号执行音乐人任务（日常签到、领云豆、发笔记及接力刷播放量）
@@ -193,6 +255,9 @@ fansgroup:
   enableMain: true
   # 是否启用辅助账号执行乐迷团任务
   enableSecondaries: true
+  # Fans group IDs 自己抓包 可以多个，默认是音乐合伙人的乐迷团.
+  groupIds:
+    - "1872529203038486609"
   # 乐迷团发布笔记后是否自动删除（留空则继承 note.autoDelete 配置）
   # autoDeleteNote: true
 
@@ -210,6 +275,10 @@ task:
   musician-vip: false
   # 是否在批量执行中包含自动发布/删除图文笔记任务
   note: false
+  # 是否开启每日分享歌曲并抽奖，需要填写antiCheatTokens
+  daily-song-share: true
+  # 是否开启赠送和领取VIP任务，需要填写antiCheatTokens
+  vip-member-gift: true
   # 是否在批量执行中包含乐迷团任务
   fansgroup: true
 
@@ -221,6 +290,7 @@ task:
 
   # 快任务列表。包含所有耗时秒级的常规打卡任务。
   fast_tasks:
+    - daily-song-share     # 每日推歌发布任务
     - VipTask              # 黑胶 VIP 任务
     - Reserve              # 预约领云贝
     - ViewVipCenter        # 浏览会员中心
@@ -231,6 +301,7 @@ task:
     - PublishNote          # 发布图文动态
     - musician-sign        # 音乐人日常签到
     - note                 # 自动发布/删除图文笔记任务
+    - vip-member-gift      # 黑胶会员赠送和领取任务（云端）
     - fansgroup            # 乐迷团任务
 
   # 慢任务列表。包含所有听歌、刷播放量等耗时数分钟到数十分钟的任务。

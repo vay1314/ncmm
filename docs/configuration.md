@@ -14,6 +14,12 @@ accounts:
   secondary:
     - "${HOME}/.ncmm/fan1.json"
     - "${HOME}/.ncmm/fan2.json"
+  # 每个 Cookie 对应的移动端 X-antiCheatToken（从各自的移动端抓包获取，每个设备/账号唯一）
+  # 每日推歌(dailySongShare)与会员送/领(vipMemberGift)共用。
+  # 没有配置 token 的账号会自动跳过需要该 token 的任务。
+  antiCheatTokens:
+    "${HOME}/.ncmm/cookie.json": ""
+    # "${HOME}/.ncmm/fan1.json": ""
 
 # log 日志模块配置
 log:
@@ -49,7 +55,15 @@ network:
   # 网络请求失败重试次数
   retry: 3
   # 全局自定义 User-Agent
-  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+  user_agent:
+    # 默认兜底 User-Agent。当下面 weapi/eapi 留空时会自动退回使用此值；xeapi 不会使用该兜底值。
+    default: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) NeteaseMusicDesktop/2.3.17.1034"
+    # Web网页端与PC桌面客户端（weapi协议接口）所使用的 User-Agent
+    weapi: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) NeteaseMusicDesktop/2.3.17.1034"
+    # 移动手机APP客户端（eapi协议接口，如音乐人做任务、防风控套件相关API）所使用的 User-Agent
+    eapi: "NeteaseMusic 9.4.95/6806 (iPhone; iOS 16.6.1; zh_CN)"
+    # XEAPI/AEAPI Android 客户端 User-Agent。每日推歌需要填写抓包移动端 UA，默认留空。
+    xeapi: ""
 
 # 本地数据存储 (主要记录播放状态进度)
 database:
@@ -110,6 +124,8 @@ task:
   musician-vip: false
   # 是否在批量执行中包含自动发布/删除图文笔记任务
   note: false
+  # 是否在批量执行中包含每日推歌发布任务
+  daily-song-share: false
   # 是否在批量执行中包含乐迷团任务
   fansgroup: true
 
@@ -119,6 +135,9 @@ fansgroup:
   enableMain: true
   # 是否使用 accounts.secondary 执行乐迷团任务
   enableSecondaries: true
+  # 需要依次执行任务的乐迷团 groupId 列表。默认乐迷团对应发布 boardId=13827903。
+  groupIds:
+    - "1872529203038486609"
   # 乐迷团发布笔记后是否自动删除（留空则继承 note.autoDelete配置）
   # autoDeleteNote: true
 
@@ -153,6 +172,52 @@ note:
   type: 39
   # 是否在笔记发布成功后自动删除（秒删），以保持个人主页整洁。默认开启
   autoDelete: true
+
+# 每日推歌发布配置
+# 重要：每日推歌需要使用同一移动端会话抓到的移动端 Cookie、匹配的移动端 UA 和 antiCheatTokens 中对应的 token。
+# 没有配置 token 的账号会自动跳过。
+dailySongShare:
+  enableMain: true
+  enableSecondaries: false
+  songId: ""                       # 指定歌曲 ID；留空时继续从 playlistId 随机选歌
+  playlistId: "13848930701"       # 高分冷门|音乐合伙人私藏歌单
+  imageMode: "songCover"          # 可选：songCover / playlistCover / custom；指定 songId 时 playlistCover 降级到歌曲封面
+  titleMode: "note"               # 可选：note / song
+  imageUrls: []                   # imageMode=custom 时使用；为空则继承 note.imageUrls
+  titles: []                      # 为空时继承 note.titles/titlesFile
+  titlesFile: []
+  messages: []                    # 为空时继承 note.messages/messagesFile
+  messagesFile: []
+  autoDelete: false               # 每日推歌默认保留
+  topics:
+    - name: "音乐合伙人的乐迷团"
+      id: "13827903"
+      type: 3
+      subType: 11
+    - name: "申请音乐合伙人"
+      id: "195425749"
+      type: 2
+      subType: 0
+    - name: "音乐合伙人星探计划"
+      id: "200773579"
+      type: 2
+      subType: 0
+  lottery:
+    enabled: false                # 是否发布后进入每日推歌抽奖
+    activityId: "11066304"        # guide 接口取不到活动 ID 时使用
+    autoRegister: true            # 抽奖前自动调用报名/登记接口
+
+# 黑胶会员免费送任务配置
+# 领取需要配置 accounts.antiCheatTokens 中对应的 token，赠送不需要。
+vipMemberGift:
+  enableMain: false               # 主账号是否启用任务
+  enableSecondaries: false         # 辅助账号是否启用任务
+  enableGift: true                # 是否发布赠送会员 token 到云端
+  enableClaim: false              # 是否从云端领取会员
+  cloud:
+    baseUrl: ""                   # 云端服务地址。留空默认使用内置服务地址。
+    token: ""                     # 云端服务交互 token。留空使用默认内置密钥。
+
 
 # 音乐人任务配置
 musician:
