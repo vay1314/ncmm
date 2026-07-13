@@ -446,7 +446,7 @@ func New(cfgPath ...string) (*Config, error) {
 		_cfgPath = cfgPath[0]
 	}
 
-	v := viper.New()
+	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
 	v.SetTypeByDefaultValue(true)
 	v.SetEnvPrefix("ncmm")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
