@@ -316,6 +316,7 @@ type VipWelfareListReq struct {
 	OS       string      `json:"os,omitempty"`
 	VerifyId int         `json:"verifyId,omitempty"`
 	Header   interface{} `json:"header"`
+	ER       bool        `json:"e_r,omitempty"`
 }
 
 type VipWelfareListResp struct {

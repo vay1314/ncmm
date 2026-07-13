@@ -246,10 +246,23 @@ func (c *SignIn) executeSingleVipTask(ctx context.Context, cli *api.Client, requ
 	if strings.Contains(v.MainTitle, "分享") {
 		c.cmd.Println("  👉 开始执行 [分享单曲到站外]...")
 		c.doVipSimulateBrowse(ctx, cli, request, v.JumpUrl, 3, 5, "分享单曲到站外")
+		c.doVipSongShare(ctx, request, eapiRequest)
 	}
 
 	if v.MissionCode == "FLQ" || strings.Contains(v.MainTitle, "领福利") {
 		c.cmd.Println("  👉 开始执行 [免费领福利]...")
+		taskIdStr := strconv.FormatInt(v.MissionId, 10)
+		if taskIdStr != "" && taskIdStr != "0" {
+			jumpUrl := v.JumpUrl
+			if !strings.Contains(jumpUrl, "view_task_id=") {
+				if strings.Contains(jumpUrl, "?") {
+					jumpUrl = fmt.Sprintf("%s&view_task_id=%s&view_task_business=music.vip_growth&view_time=15", jumpUrl, taskIdStr)
+				} else {
+					jumpUrl = fmt.Sprintf("%s?view_task_id=%s&view_task_business=music.vip_growth&view_time=15", jumpUrl, taskIdStr)
+				}
+			}
+			c.doVipSimulateBrowse(ctx, cli, request, jumpUrl, 16, 20, "免费领福利")
+		}
 		c.doVipWelfareClaim(ctx, request, eapiRequest, userLevel)
 	}
 }
@@ -307,9 +320,34 @@ func (c *SignIn) handleVipTasks(ctx context.Context, cli *api.Client, request *w
 			return
 		}
 
+		allTasks := taskList.Data
+		if progressList, err := getVipProgressTasks(ctx, request); err == nil {
+			existing := make(map[string]bool)
+			for _, t := range allTasks {
+				if t.MissionCode != "" {
+					existing[t.MissionCode] = true
+				}
+				existing[t.MainTitle] = true
+			}
+			for _, t := range progressList {
+				isDup := false
+				if t.MissionCode != "" && existing[t.MissionCode] {
+					isDup = true
+				}
+				if existing[t.MainTitle] {
+					isDup = true
+				}
+				if !isDup {
+					allTasks = append(allTasks, t)
+				}
+			}
+		} else {
+			c.cmd.Printf("  ⚠️ 获取成长中心任务列表失败: %v\n", err)
+		}
+
 		var signVerifyReason string
 		if !signedToday {
-			if ok, reason := getVipSignCompleted(ctx, eapiRequest, deviceId, taskList.Data); ok {
+			if ok, reason := getVipSignCompleted(ctx, eapiRequest, deviceId, allTasks); ok {
 				signedToday = true
 				signVerifyReason = reason
 			}
@@ -318,7 +356,7 @@ func (c *SignIn) handleVipTasks(ctx context.Context, cli *api.Client, request *w
 		// 筛选待做任务
 		var todoTasks []eapi.VipTaskListData
 		var hasVipSignTask bool
-		for _, v := range taskList.Data {
+		for _, v := range allTasks {
 			if isVipSignTask(v) {
 				hasVipSignTask = true
 				if !signedToday {
@@ -408,7 +446,29 @@ func (c *SignIn) handleVipTasks(ctx context.Context, cli *api.Client, request *w
 	finalList, err := eapiRequest.VipTaskList(ctx, newVipTaskListReq(deviceId))
 	if err == nil && finalList.Code == 200 {
 		c.cmd.Println("  👉 最终的黑胶 VIP 任务列表状态:")
-		for _, v := range finalList.Data {
+		allFinalTasks := finalList.Data
+		if progressList, err := getVipProgressTasks(ctx, request); err == nil {
+			existing := make(map[string]bool)
+			for _, t := range allFinalTasks {
+				if t.MissionCode != "" {
+					existing[t.MissionCode] = true
+				}
+				existing[t.MainTitle] = true
+			}
+			for _, t := range progressList {
+				isDup := false
+				if t.MissionCode != "" && existing[t.MissionCode] {
+					isDup = true
+				}
+				if existing[t.MainTitle] {
+					isDup = true
+				}
+				if !isDup {
+					allFinalTasks = append(allFinalTasks, t)
+				}
+			}
+		}
+		for _, v := range allFinalTasks {
 			statusStr := "未完成"
 			if v.Status == 100 {
 				statusStr = "已完成"
@@ -592,6 +652,50 @@ func (c *SignIn) doVipSongListen(ctx context.Context, request *weapi.Api, eapiRe
 	c.cmd.Printf("  ✅ 听 3 首 VIP 歌曲操作完毕，成功: %d/%d\n", successCount, count)
 }
 
+// doVipSongShare 专门分享热门 VIP 歌曲，用于打卡“分享单曲到站外”任务
+func (c *SignIn) doVipSongShare(ctx context.Context, request *weapi.Api, eapiRequest *eapi.Api) {
+	// 获取热门 VIP 歌曲歌单 8402996200
+	detail, err := request.PlaylistDetail(ctx, &weapi.PlaylistDetailReq{
+		Id: "8402996200",
+		N:  "10",
+		S:  "0",
+	})
+	if err != nil || detail.Code != 200 || len(detail.Playlist.TrackIds) == 0 {
+		c.cmd.Printf("  ❌ 获取热门 VIP 歌曲歌单失败，无法执行分享: %v\n", err)
+		return
+	}
+
+	trackIds := detail.Playlist.TrackIds
+	n := len(trackIds)
+	if n == 0 {
+		c.cmd.Println("  ❌ 热门 VIP 歌单歌曲为空")
+		return
+	}
+
+	// 随机挑选一首进行分享
+	idx := rand.Intn(n)
+	songId := trackIds[idx].Id
+	songIdStr := fmt.Sprintf("%d", songId)
+
+	c.cmd.Printf("  👉 随机选择 VIP 歌曲 ID %d 进行站外分享...\n", songId)
+
+	// 调用 DailySongShareTrigger 进行分享 (channel="copylink", CryptoMode=api.CryptoModeEAPI)
+	reqObj := &eapi.DailySongShareTriggerReq{
+		SongID:  songIdStr,
+		Channel: "copylink",
+	}
+	reqObj.CryptoMode = api.CryptoModeEAPI
+	resp, shareErr := eapiRequest.DailySongShareTrigger(ctx, reqObj)
+
+	if shareErr != nil {
+		c.cmd.Printf("  ❌ 站外分享单曲上报失败: %v\n", shareErr)
+	} else if resp.Code != 200 || !resp.Data {
+		c.cmd.Printf("  ⚠️ 站外分享单曲上报异常: code=%d msg=%s data=%v\n", resp.Code, resp.Message, resp.Data)
+	} else {
+		c.cmd.Printf("  ✅ 站外分享单曲上报成功 (SongID: %s)\n", songIdStr)
+	}
+}
+
 // doVipSimulateBrowse 模拟请求活动页面并在本地进行停留随机延迟，达成网页停留要求
 func (c *SignIn) doVipSimulateBrowse(ctx context.Context, cli *api.Client, request *weapi.Api, jumpUrl string, minSec, maxSec int, taskName string) {
 	if jumpUrl == "" {
@@ -614,8 +718,9 @@ func (c *SignIn) doVipSimulateBrowse(ctx context.Context, cli *api.Client, reque
 		taskType     int    = 200
 		viewTime     int64  = 15
 		taskBusiness string = "music.vip_growth"
-		pageCode     string = "music_vip_sound_effect_detail"
 	)
+
+	var pageCodes []string
 
 	if parsedUrl, err := url.Parse(jumpUrl); err == nil {
 		q := parsedUrl.Query()
@@ -636,63 +741,110 @@ func (c *SignIn) doVipSimulateBrowse(ctx context.Context, cli *api.Client, reque
 			}
 		}
 
-		// Dynamically construct pageCode based on URL path base
-		// e.g., /st/vip/sound-effect-detail -> sound_effect_detail -> music_vip_sound_effect_detail
+		// Dynamically construct pageCodes based on URL path base, component or route param
+		if q.Get("component") != "" {
+			comp := q.Get("component")
+			cleaned := strings.ReplaceAll(comp, "-", "_")
+			pageCodes = append(pageCodes, "music_vip_"+cleaned)
+			pageCodes = append(pageCodes, cleaned)
+			pageCodes = append(pageCodes, "music_vip_"+comp)
+			pageCodes = append(pageCodes, comp)
+			if strings.HasPrefix(comp, "rn-") {
+				noRn := comp[3:]
+				cleanedNoRn := strings.ReplaceAll(noRn, "-", "_")
+				pageCodes = append(pageCodes, "music_vip_"+cleanedNoRn)
+				pageCodes = append(pageCodes, cleanedNoRn)
+				pageCodes = append(pageCodes, "music_vip_"+noRn)
+				pageCodes = append(pageCodes, noRn)
+			}
+		}
+
+		if q.Get("route") != "" {
+			route := q.Get("route")
+			cleanedRoute := strings.ReplaceAll(route, "-", "_")
+			pageCodes = append(pageCodes, "music_vip_"+cleanedRoute)
+			pageCodes = append(pageCodes, cleanedRoute)
+			pageCodes = append(pageCodes, "music_vip_"+route)
+			pageCodes = append(pageCodes, route)
+		}
+
+		if q.Get("component") != "" && q.Get("route") != "" {
+			comp := q.Get("component")
+			route := q.Get("route")
+			comb := comp + "_" + route
+			cleanedComb := strings.ReplaceAll(comb, "-", "_")
+			pageCodes = append(pageCodes, "music_vip_"+cleanedComb)
+			pageCodes = append(pageCodes, cleanedComb)
+			pageCodes = append(pageCodes, "music_vip_"+comb)
+			pageCodes = append(pageCodes, comb)
+		}
+
 		pathParts := strings.Split(parsedUrl.Path, "/")
 		if len(pathParts) > 0 {
 			lastPart := pathParts[len(pathParts)-1]
 			if lastPart != "" {
 				cleaned := strings.ReplaceAll(lastPart, "-", "_")
-				pageCode = "music_vip_" + cleaned
+				pageCodes = append(pageCodes, "music_vip_"+cleaned)
+				pageCodes = append(pageCodes, cleaned)
 			}
 		}
 	}
 
-	var webkitContext string
-	c.cmd.Printf("  👉 模拟加载 [%s] 页面...\n", taskName)
-	httpClient := cli.GetClient()
-	req, err := http.NewRequestWithContext(ctx, "GET", jumpUrl, nil)
-	if err != nil {
-		c.cmd.Printf("  ⚠️ [%s] 创建请求失败: %v\n", taskName, err)
-	} else {
-		webViewId := fmt.Sprintf("%d", 1000000000+rand.Int63n(9000000000))
-		escapedHref := strings.ReplaceAll(jumpUrl, "/", "\\/")
-		webkitContext = fmt.Sprintf(`{"webViewId":"%s","href":"%s","newebkit":1}`, webViewId, escapedHref)
-
-		req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 CloudMusic/0.1.1 NeteaseMusic/9.4.95")
-		req.Header.Set("netease_webkit_context", webkitContext)
-		req.Header.Set("Referer", "https://music.163.com/")
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		req.Header.Set("Accept-Language", "zh-CN,zh-Hans;q=0.9")
-
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			c.cmd.Printf("  ⚠️ [%s] 模拟页面请求失败 (but usually does not affect result): %v\n", taskName, err)
-		} else {
-			resp.Body.Close()
-			c.cmd.Printf("  ℹ️ 页面加载响应码: %d\n", resp.StatusCode)
-		}
+	if len(pageCodes) == 0 {
+		pageCodes = append(pageCodes, "music_vip_sound_effect_detail")
 	}
 
-	// Report viewStart to create a server-side browsing session
+	var webkitContext string
+	webViewId := fmt.Sprintf("%d", 1000000000+rand.Int63n(9000000000))
+	escapedHref := strings.ReplaceAll(jumpUrl, "/", "\\/")
+	webkitContext = fmt.Sprintf(`{"webViewId":"%s","href":"%s","newebkit":1}`, webViewId, escapedHref)
+
+	if strings.HasPrefix(jumpUrl, "http://") || strings.HasPrefix(jumpUrl, "https://") {
+		c.cmd.Printf("  👉 模拟加载 [%s] 页面...\n", taskName)
+		httpClient := cli.GetClient()
+		req, err := http.NewRequestWithContext(ctx, "GET", jumpUrl, nil)
+		if err != nil {
+			c.cmd.Printf("  ⚠️ [%s] 创建请求失败: %v\n", taskName, err)
+		} else {
+			req.Header.Set("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 CloudMusic/0.1.1 NeteaseMusic/9.4.95")
+			req.Header.Set("netease_webkit_context", webkitContext)
+			req.Header.Set("Referer", "https://music.163.com/")
+			req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+			req.Header.Set("Accept-Language", "zh-CN,zh-Hans;q=0.9")
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				c.cmd.Printf("  ⚠️ [%s] 模拟页面请求失败 (but usually does not affect result): %v\n", taskName, err)
+			} else {
+				resp.Body.Close()
+				c.cmd.Printf("  ℹ️ 页面加载响应码: %d\n", resp.StatusCode)
+			}
+		}
+	} else {
+		c.cmd.Printf("  ℹ️ [%s] 为 App 内部跳转链接，跳过 HTTP 模拟加载，直接进行浏览上报...\n", taskName)
+	}
+
+	// Report viewStart to create a server-side browsing session (for all candidate pageCodes and resourceTypes)
 	if taskId != "" {
-		startBytes, _ := json.Marshal(weapi.VipMiddlePageViewReportData{
-			ActionType:   "viewStart",
-			Time:         time.Now().UnixNano() / int64(time.Millisecond),
-			TaskId:       taskId,
-			TaskType:     taskType,
-			ViewTime:     0,
-			JumpUrl:      jumpUrl,
-			TaskBusiness: taskBusiness,
-			ResourceType: "vip_growth",
-			PageCode:     pageCode,
-		})
-		_, startErr := request.VipMiddlePageViewReport(ctx, &weapi.VipMiddlePageViewReportReq{
-			WebkitContext: webkitContext,
-			Data:          string(startBytes),
-		})
-		if startErr != nil {
-			c.cmd.Printf("  ⚠️ [%s] 上报 viewStart 失败: %v\n", taskName, startErr)
+		resourceTypes := []string{"vip_growth", taskBusiness, ""}
+		for _, pc := range pageCodes {
+			for _, rt := range resourceTypes {
+				startBytes, _ := json.Marshal(weapi.VipMiddlePageViewReportData{
+					ActionType:   "viewStart",
+					Time:         time.Now().UnixNano() / int64(time.Millisecond),
+					TaskId:       taskId,
+					TaskType:     taskType,
+					ViewTime:     0,
+					JumpUrl:      jumpUrl,
+					TaskBusiness: taskBusiness,
+					ResourceType: rt,
+					PageCode:     pc,
+				})
+				_, _ = request.VipMiddlePageViewReport(ctx, &weapi.VipMiddlePageViewReportReq{
+					WebkitContext: webkitContext,
+					Data:          string(startBytes),
+				})
+			}
 		}
 	}
 
@@ -716,28 +868,33 @@ func (c *SignIn) doVipSimulateBrowse(ctx context.Context, cli *api.Client, reque
 	}
 	c.cmd.Printf("  ✅ [%s] 页面浏览模拟完成\n", taskName)
 
-	// Report page view end to complete the task
+	// Report page view end to complete the task (for all candidate pageCodes and resourceTypes)
 	if taskId != "" {
-		c.cmd.Printf("  👉 正在上报 [%s] 的浏览完成状态 (taskId: %s, duration: %d秒)...\n", taskName, taskId, sleepSec)
-		dataBytes, _ := json.Marshal(weapi.VipMiddlePageViewReportData{
-			ActionType:   "viewEnd",
-			Time:         time.Now().UnixNano() / int64(time.Millisecond),
-			TaskId:       taskId,
-			TaskType:     taskType,
-			ViewTime:     int64(sleepSec) * 1000,
-			JumpUrl:      jumpUrl,
-			TaskBusiness: taskBusiness,
-			ResourceType: "vip_growth",
-			PageCode:     pageCode,
-		})
-		resp, reportErr := request.VipMiddlePageViewReport(ctx, &weapi.VipMiddlePageViewReportReq{
-			WebkitContext: webkitContext,
-			Data:          string(dataBytes),
-		})
-		if reportErr != nil {
-			c.cmd.Printf("  ❌ 上报 [%s] 浏览完成状态失败: %v\n", taskName, reportErr)
-		} else {
-			c.cmd.Printf("  ✅ 上报 [%s] 浏览完成状态成功: code=%d, data=%v, msg=%s\n", taskName, resp.Code, resp.Data, resp.Message)
+		resourceTypes := []string{"vip_growth", taskBusiness, ""}
+		for _, pc := range pageCodes {
+			for _, rt := range resourceTypes {
+				c.cmd.Printf("  👉 正在上报 [%s] 的浏览完成状态 (taskId: %s, pageCode: %s, resourceType: %s, duration: %d秒)...\n", taskName, taskId, pc, rt, sleepSec)
+				dataBytes, _ := json.Marshal(weapi.VipMiddlePageViewReportData{
+					ActionType:   "viewEnd",
+					Time:         time.Now().UnixNano() / int64(time.Millisecond),
+					TaskId:       taskId,
+					TaskType:     taskType,
+					ViewTime:     int64(sleepSec) * 1000,
+					JumpUrl:      jumpUrl,
+					TaskBusiness: taskBusiness,
+					ResourceType: rt,
+					PageCode:     pc,
+				})
+				resp, reportErr := request.VipMiddlePageViewReport(ctx, &weapi.VipMiddlePageViewReportReq{
+					WebkitContext: webkitContext,
+					Data:          string(dataBytes),
+				})
+				if reportErr != nil {
+					c.cmd.Printf("  ❌ 上报 [%s](%s/%s) 浏览完成状态失败: %v\n", taskName, pc, rt, reportErr)
+				} else {
+					c.cmd.Printf("  ✅ 上报 [%s](%s/%s) 浏览完成状态成功: code=%d, data=%v, msg=%s\n", taskName, pc, rt, resp.Code, resp.Data, resp.Message)
+				}
+			}
 		}
 	}
 }
@@ -748,16 +905,31 @@ func (c *SignIn) doVipWelfareClaim(ctx context.Context, request *weapi.Api, eapi
 	c.cmd.Println("  👉 获取当前常驻免费商家福利券列表...")
 	benefitList, err := eapiRequest.VipBenefitCategoryList(ctx, &eapi.VipBenefitCategoryListReq{
 		Category: "1291816",
-		Header:   struct{}{},
+		Header:   "{}",
+		ER:       true,
 	})
 	if err == nil && benefitList.Code == 200 && len(benefitList.Data) > 0 {
 		var targetBenefitId int64
 		var targetBenefitName string
+		// 优先查找含有“免费”或“0元”等字样的纯免费商家福利券
 		for _, b := range benefitList.Data {
 			if !b.BenefitGet && b.Id > 0 {
-				targetBenefitId = b.Id
-				targetBenefitName = b.Name
-				break
+				nameLower := strings.ToLower(b.Name)
+				if strings.Contains(nameLower, "免费") || strings.Contains(nameLower, "0元") {
+					targetBenefitId = b.Id
+					targetBenefitName = b.Name
+					break
+				}
+			}
+		}
+		// 如果没有找到带免费字样的，再兜底选择第一个未领取的福利券
+		if targetBenefitId == 0 {
+			for _, b := range benefitList.Data {
+				if !b.BenefitGet && b.Id > 0 {
+					targetBenefitId = b.Id
+					targetBenefitName = b.Name
+					break
+				}
 			}
 		}
 
@@ -765,7 +937,8 @@ func (c *SignIn) doVipWelfareClaim(ctx context.Context, request *weapi.Api, eapi
 			c.cmd.Printf("  👉 发现尚未领取的商家福利券: [%s] (Id: %d)，开始自动领券打卡...\n", targetBenefitName, targetBenefitId)
 			getResp, getErr := eapiRequest.VipBenefitGet(ctx, &eapi.VipBenefitGetReq{
 				Id:     fmt.Sprintf("%d", targetBenefitId),
-				Header: struct{}{},
+				Header: "{}",
+				ER:     true,
 			})
 			if getErr != nil {
 				c.cmd.Printf("  ❌ 领取福利券 [%s] 失败 (网络错误): %v\n", targetBenefitName, getErr)
@@ -773,24 +946,18 @@ func (c *SignIn) doVipWelfareClaim(ctx context.Context, request *weapi.Api, eapi
 				c.cmd.Printf("  ❌ 领取福利券 [%s] 失败: code=%d, msg=%s\n", targetBenefitName, getResp.Code, getResp.Message)
 			} else {
 				c.cmd.Printf("  🎉 成功领券打卡日常福利任务: [%s]\n", targetBenefitName)
-				return // 领券成功即代表日常任务打卡成功，直接返回，不再执行后续降级逻辑
 			}
 		} else {
-			c.cmd.Println("  ℹ️ 所有商家福利券都已领过，跳过自动领券打卡")
+			c.cmd.Println("  ℹ️ 所有商家福利券都已领过，继续后续福利打卡")
 		}
 	} else {
 		c.cmd.Printf("  ⚠️ 获取商家福利券列表失败 (可能是网络波动或接口微调): %v\n", err)
 	}
 
 	// 2. 兜底方案：触发 EAPI 版本的福利列表获取，此操作同样可尝试触发日常任务判定
-	cli := eapiRequest.Client()
-	welfareDeviceId := cli.GetDeviceId()
-
 	_, _ = eapiRequest.VipWelfareList(ctx, &eapi.VipWelfareListReq{
-		DeviceId: welfareDeviceId,
-		OS:       "iOS",
-		VerifyId: 1,
-		Header:   struct{}{},
+		Header: "{}",
+		ER:     true,
 	})
 
 	c.cmd.Println("  👉 获取当前可领取的黑胶等级福利列表...")
@@ -843,4 +1010,51 @@ func (c *SignIn) doVipWelfareClaim(ctx context.Context, request *weapi.Api, eapi
 	} else {
 		c.cmd.Printf("  🎉 成功领取尊享等级福利: [%s]\n", targetWelfareName)
 	}
+}
+
+// getVipProgressTasks 获取成长中心任务列表，将其转换为标准任务格式以丰富黑胶任务列表
+func getVipProgressTasks(ctx context.Context, request *weapi.Api) ([]eapi.VipTaskListData, error) {
+	resp, err := request.VipProgressList(ctx, &weapi.VipProgressListReq{})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Code != 200 {
+		return nil, fmt.Errorf("VipProgressList code=%d", resp.Code)
+	}
+
+	var list []eapi.VipTaskListData
+	for _, item := range resp.Data {
+		var jumpUrl string
+		if item.BasicMissionDTO.SchemaContent != "" {
+			var sc struct {
+				JumpUrl string `json:"jumpUrl"`
+			}
+			_ = json.Unmarshal([]byte(item.BasicMissionDTO.SchemaContent), &sc)
+			jumpUrl = sc.JumpUrl
+			if jumpUrl == "" {
+				var scSpace struct {
+					JumpUrl string `json:"jumpUrl "`
+				}
+				_ = json.Unmarshal([]byte(item.BasicMissionDTO.SchemaContent), &scSpace)
+				jumpUrl = scSpace.JumpUrl
+			}
+		}
+
+		worth := int64(0)
+		if len(item.StageProgressDTOS) > 0 {
+			worth = item.StageProgressDTOS[0].Worth
+		}
+
+		list = append(list, eapi.VipTaskListData{
+			MissionId:       item.BasicMissionDTO.MissionId,
+			MissionCode:     item.BasicMissionDTO.MissionCode,
+			MissionType:     item.BasicMissionDTO.MissionType,
+			MissionEntityId: item.BasicMissionDTO.MissionEntityId,
+			Status:          item.MissionStatus,
+			Worth:           worth,
+			MainTitle:       item.BasicMissionDTO.Name,
+			JumpUrl:         jumpUrl,
+		})
+	}
+	return list, nil
 }

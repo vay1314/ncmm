@@ -370,7 +370,7 @@ func (c *Client) Request(ctx context.Context, url string, req, resp interface{},
 			request.SetCookies(c.GetCookies(mURL))
 		}
 	}
-	if opts.CryptoMode == CryptoModeXEAPI {
+	if opts.CryptoMode == CryptoModeXEAPI || opts.CryptoMode == CryptoModeEAPI {
 		c.applyXEAPIHeaders(request)
 	}
 
