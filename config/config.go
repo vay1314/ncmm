@@ -70,13 +70,31 @@ func (a *AccountsConf) AntiCheatTokenFor(cookiePath string) string {
 	if a == nil || a.AntiCheatTokens == nil {
 		return ""
 	}
-	if v, ok := a.AntiCheatTokens[cookiePath]; ok && strings.TrimSpace(v) != "" {
+	candidates := []string{cookiePath}
+	if abs, err := filepath.Abs(cookiePath); err == nil && abs != cookiePath {
+		candidates = append(candidates, abs)
+	}
+
+	for _, candidate := range candidates {
+		if v := lookupAntiCheatToken(a.AntiCheatTokens, candidate); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func lookupAntiCheatToken(tokens map[string]string, cookiePath string) string {
+	if v, ok := tokens[cookiePath]; ok && strings.TrimSpace(v) != "" {
 		return strings.TrimSpace(v)
 	}
-	abs, err := filepath.Abs(cookiePath)
-	if err == nil && abs != cookiePath {
-		if v, ok := a.AntiCheatTokens[abs]; ok && strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v)
+	cleanPath := filepath.Clean(cookiePath)
+	for key, value := range tokens {
+		token := strings.TrimSpace(value)
+		if token == "" {
+			continue
+		}
+		if strings.EqualFold(key, cookiePath) || strings.EqualFold(filepath.Clean(key), cleanPath) {
+			return token
 		}
 	}
 	return ""
