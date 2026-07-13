@@ -216,6 +216,7 @@ jobs:
             dist/*.tar.gz
           overwrite_files: true
           body_path: ${{ runner.temp }}/release_notes.md
+          generate_release_notes: true
           draft: false
           prerelease: ${{ env.RELEASE_TYPE == '预发布版（pre-release）' }}
           make_latest: ${{ env.RELEASE_TYPE == '最新正式版（latest release）' }}

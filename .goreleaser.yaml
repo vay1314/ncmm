@@ -14,8 +14,7 @@ before:
 
 # 编译配置
 builds:
-  - id: windows-amd64
-    env:
+  - env:
       - CGO_ENABLED=0
     main: .
     binary: ncmm
@@ -23,46 +22,16 @@ builds:
       - -s -w -X "main.Version={{.Version}}" -X "main.Commit={{.FullCommit}}" -X "main.BuildTime={{.CommitDate}}"
     goos:
       - windows
-    goarch:
-      - amd64
-
-  - id: linux-amd64
-    env:
-      - CGO_ENABLED=0
-    main: .
-    binary: ncmm
-    ldflags:
-      - -s -w -X "main.Version={{.Version}}" -X "main.Commit={{.FullCommit}}" -X "main.BuildTime={{.CommitDate}}"
-    goos:
       - linux
     goarch:
       - amd64
-
-  - id: linux-arm64
-    env:
-      - CGO_ENABLED=0
-    main: .
-    binary: ncmm
-    ldflags:
-      - -s -w -X "main.Version={{.Version}}" -X "main.Commit={{.FullCommit}}" -X "main.BuildTime={{.CommitDate}}"
-    goos:
-      - linux
-    goarch:
       - arm64
-
-  - id: linux-armv6
-    env:
-      - CGO_ENABLED=0
-    main: .
-    binary: ncmm
-    ldflags:
-      - -s -w -X "main.Version={{.Version}}" -X "main.Commit={{.FullCommit}}" -X "main.BuildTime={{.CommitDate}}"
-    goos:
-      - linux
-    goarch:
       - arm
     goarm:
       - 6
+    ignore:
+      - goos: windows
+        goarch: arm
 
 # 打包配置
 archives:
@@ -84,3 +53,20 @@ archives:
       - README.md
       - src: config/config.yaml
         dst: config.yaml
+
+# 发布日志配置
+changelog:
+  # 优先使用 GitHub 的自动 Release Notes 生成机制，能完美展示贡献者头像
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^typo:'
+      - '(?i)merge'
+
+# 远程发布配置
+release:
+  github:
+    owner: 3899
+    name: ncmm
