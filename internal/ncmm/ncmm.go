@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/3899/ncmm/config"
 	"github.com/3899/ncmm/pkg/log"
+	"github.com/3899/ncmm/pkg/notify"
 	"github.com/3899/ncmm/pkg/utils"
 
 	"github.com/spf13/cobra"
@@ -31,6 +33,10 @@ type Root struct {
 	cmd        *cobra.Command
 	l          *log.Logger
 	AppVersion string
+	// Report collects failures/skips for end-of-run notify summary.
+	Report *notify.Report
+	// Notifier is nil when notify is disabled or no channels are configured.
+	Notifier *notify.Dispatcher
 }
 
 func New() *Root {
@@ -98,12 +104,25 @@ func New() *Root {
 		log.Default = c.l
 		log.Debug("[config] init home=%s path=%s log=%+v network=%+v", home, cfgPath, c.Cfg.Log, c.Cfg.Network)
 
+		c.initNotify()
+		if c.Report != nil {
+			// Prefer the leaf command path, e.g. "ncmm task" / "ncmm musician sign"
+			c.Report.SetCommand(strings.TrimSpace(cmd.CommandPath()))
+		}
+
 		c.CheckForUpdatesPreRun()
 		return nil
 	}
 	c.cmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
+		if c.Report != nil {
+			c.Report.SetCommand(strings.TrimSpace(cmd.CommandPath()))
+		}
+		c.FlushNotify(strings.TrimSpace(cmd.CommandPath()))
 		c.ShowUpdateNotificationPostRun()
-		return c.l.Close()
+		if c.l != nil {
+			return c.l.Close()
+		}
+		return nil
 	}
 
 	c.addFlags()

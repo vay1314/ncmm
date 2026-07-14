@@ -264,12 +264,16 @@ func (mc *musicianContext) close(ctx context.Context) {
 
 func (c *Musician) execute(ctx context.Context) error {
 	if err := c.validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
+		err = fmt.Errorf("validate: %w", err)
+		c.root.ReportFailure("-", "musician", err)
+		return err
 	}
 
 	cfg := c.root.Cfg
 	if cfg.Accounts == nil {
-		return fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		err := fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		c.root.ReportFailure("-", "musician", err)
+		return err
 	}
 
 	var activeAccounts []struct {
@@ -308,6 +312,7 @@ func (c *Musician) execute(ctx context.Context) error {
 
 	if len(activeAccounts) == 0 {
 		c.cmd.Println("[musician] 未启用或未配置任何账号进行音乐人任务，请检查 config.yaml")
+		c.root.ReportSkip("-", "musician", "未启用或未配置任何账号")
 		return nil
 	}
 
@@ -316,11 +321,13 @@ func (c *Musician) execute(ctx context.Context) error {
 			c.cmd.Printf("[musician] >>>>>> 开始主账号音乐人任务 (%s) <<<<<<\n", acc.Filepath)
 			if err := c.runMusicianForCookie(ctx, acc.Filepath, true); err != nil {
 				c.cmd.Printf("[musician] ❌ 主账号任务失败: %s\n", err)
+				c.root.ReportFailure(acc.Filepath, "musician", err)
 			}
 		} else {
 			c.cmd.Printf("[musician] >>>>>> 开始辅助账号音乐人任务 (%s) <<<<<<\n", acc.Filepath)
 			if err := c.runMusicianForCookie(ctx, acc.Filepath, false); err != nil {
 				c.cmd.Printf("[musician] ❌ 辅助账号任务失败: %s\n", err)
+				c.root.ReportFailure(acc.Filepath, "musician", err)
 			}
 		}
 
@@ -363,12 +370,16 @@ func (c *Musician) runMusicianForCookie(ctx context.Context, cookieFile string, 
 
 func (c *Musician) executeSign(ctx context.Context) error {
 	if err := c.validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
+		err = fmt.Errorf("validate: %w", err)
+		c.root.ReportFailure("-", "musician-sign", err)
+		return err
 	}
 
 	cfg := c.root.Cfg
 	if cfg.Accounts == nil {
-		return fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		err := fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		c.root.ReportFailure("-", "musician-sign", err)
+		return err
 	}
 
 	var hasExecuted bool
@@ -378,6 +389,7 @@ func (c *Musician) executeSign(ctx context.Context) error {
 		c.cmd.Printf("[musician sign] >>>>>> 开始主账号音乐人日常签到 (%s) <<<<<<\n", cfg.Accounts.Main)
 		if err := c.RunSignForCookie(ctx, cfg.Accounts.Main); err != nil {
 			c.cmd.Printf("[musician sign] ❌ 主账号签到失败: %s\n", err)
+			c.root.ReportFailure(cfg.Accounts.Main, "musician-sign", err)
 		}
 		hasExecuted = true
 	} else {
@@ -394,6 +406,7 @@ func (c *Musician) executeSign(ctx context.Context) error {
 			c.cmd.Printf("[musician sign] >>>>>> 开始辅助账号音乐人日常签到 (%s) <<<<<<\n", secCookie)
 			if err := c.RunSignForCookie(ctx, secCookie); err != nil {
 				c.cmd.Printf("[musician sign] ❌ 辅助账号签到失败: %s\n", err)
+				c.root.ReportFailure(secCookie, "musician-sign", err)
 			}
 			hasExecuted = true
 		}
@@ -407,6 +420,7 @@ func (c *Musician) executeSign(ctx context.Context) error {
 
 	if !hasExecuted {
 		c.cmd.Println("[musician sign] 未启用或未配置任何账号进行音乐人签到，请检查 config.yaml")
+		c.root.ReportSkip("-", "musician-sign", "未启用或未配置任何账号")
 	} else {
 		c.cmd.Println("[musician sign] 所有音乐人日常签到任务执行完毕！")
 	}
@@ -429,12 +443,16 @@ func (c *Musician) RunSignForCookie(ctx context.Context, cookieFile string) erro
 
 func (c *Musician) executeVip(ctx context.Context) error {
 	if err := c.validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
+		err = fmt.Errorf("validate: %w", err)
+		c.root.ReportFailure("-", "musician-vip", err)
+		return err
 	}
 
 	cfg := c.root.Cfg
 	if cfg.Accounts == nil {
-		return fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		err := fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		c.root.ReportFailure("-", "musician-vip", err)
+		return err
 	}
 
 	var hasExecuted bool
@@ -444,6 +462,7 @@ func (c *Musician) executeVip(ctx context.Context) error {
 		c.cmd.Printf("[musician vip] >>>>>> 开始主账号音乐人VIP进阶任务 (%s) <<<<<<\n", cfg.Accounts.Main)
 		if err := c.RunVipForCookie(ctx, cfg.Accounts.Main); err != nil {
 			c.cmd.Printf("[musician vip] ❌ 主账号VIP任务失败: %s\n", err)
+			c.root.ReportFailure(cfg.Accounts.Main, "musician-vip", err)
 		}
 		hasExecuted = true
 	} else {
@@ -460,6 +479,7 @@ func (c *Musician) executeVip(ctx context.Context) error {
 			c.cmd.Printf("[musician vip] >>>>>> 开始辅助账号音乐人VIP进阶任务 (%s) <<<<<<\n", secCookie)
 			if err := c.RunVipForCookie(ctx, secCookie); err != nil {
 				c.cmd.Printf("[musician vip] ❌ 辅助账号VIP任务失败: %s\n", err)
+				c.root.ReportFailure(secCookie, "musician-vip", err)
 			}
 			hasExecuted = true
 		}
@@ -473,6 +493,7 @@ func (c *Musician) executeVip(ctx context.Context) error {
 
 	if !hasExecuted {
 		c.cmd.Println("[musician vip] 未启用或未配置任何账号进行音乐人VIP任务，请检查 config.yaml")
+		c.root.ReportSkip("-", "musician-vip", "未启用或未配置任何账号")
 	} else {
 		c.cmd.Println("[musician vip] 所有音乐人VIP进阶任务执行完毕！")
 	}

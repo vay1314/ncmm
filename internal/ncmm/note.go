@@ -58,10 +58,15 @@ func (c *Note) execute(ctx context.Context) error {
 		if c.root.Cfg.Accounts != nil && c.root.Cfg.Accounts.Main != "" {
 			cookieFile = c.root.Cfg.Accounts.Main
 		} else {
-			return fmt.Errorf("cookie file must be specified via --cookie-file or configured in config.yaml accounts.main")
+			err := fmt.Errorf("cookie file must be specified via --cookie-file or configured in config.yaml accounts.main")
+			c.root.ReportFailure("-", "note", err)
+			return err
 		}
 	}
 	_, err := c.ExecuteForCookie(ctx, cookieFile)
+	if err != nil {
+		c.root.ReportFailure(cookieFile, "note", err)
+	}
 	return err
 }
 

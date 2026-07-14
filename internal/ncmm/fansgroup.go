@@ -84,7 +84,9 @@ func (c *FansGroup) execute(ctx context.Context) error {
 	} else {
 		cfg := c.root.Cfg
 		if cfg.Accounts == nil {
-			return fmt.Errorf("missing accounts section")
+			err := fmt.Errorf("missing accounts section")
+			c.root.ReportFailure("-", "fansgroup", err)
+			return err
 		}
 		if cfg.FansGroup != nil && cfg.FansGroup.EnableMain && cfg.Accounts.Main != "" {
 			queue = append(queue, cfg.Accounts.Main)
@@ -96,6 +98,7 @@ func (c *FansGroup) execute(ctx context.Context) error {
 
 	if len(queue) == 0 {
 		c.cmd.Println("[fansgroup] 未配置可用账号，请检查 config.yaml")
+		c.root.ReportSkip("-", "fansgroup", "未配置可用账号")
 		return nil
 	}
 
@@ -103,6 +106,7 @@ func (c *FansGroup) execute(ctx context.Context) error {
 		c.cmd.Printf("[fansgroup] 开始处理账号 (%s)\n", cookie)
 		if err := c.ExecuteForCookie(ctx, cookie); err != nil {
 			c.cmd.Printf("[fansgroup] 账号处理失败 (%s): %v\n", cookie, err)
+			c.root.ReportFailure(cookie, "fansgroup", err)
 		}
 		c.cmd.Println("[fansgroup] --------------------------------------------------")
 

@@ -216,7 +216,31 @@ func (c *Task) sleepBetweenAccounts(ctx context.Context, currentAccount string) 
 	}
 }
 
-func (c *Task) executeAction(ctx context.Context, stdAction string, account Account, queue []string, activeTasks map[string]bool, signRunMap map[string]bool) bool {
+// isSessionInvalidError 判断错误是否为 Cookie/会话失效，此类错误应跳过该账号后续任务。
+func isSessionInvalidError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	patterns := []string{
+		"cookie 已失效",
+		"需要登录",
+		"need login",
+		"not logged in",
+		"session expired",
+		"user not logged in",
+	}
+	for _, p := range patterns {
+		if strings.Contains(msg, strings.ToLower(p)) {
+			return true
+		}
+	}
+	return false
+}
+
+// executeAction runs one task action. sessionInvalid is true when the cookie/session is dead
+// and remaining tasks for this account should be skipped.
+func (c *Task) executeAction(ctx context.Context, stdAction string, account Account, queue []string, activeTasks map[string]bool, signRunMap map[string]bool) (executed bool, sessionInvalid bool) {
 	isSignSubtask := false
 	signSubtasks := []string{
 		"VipTask", "Reserve", "ViewVipCenter", "LikeComment", "FollowArtist",
@@ -230,7 +254,6 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 	}
 
 	if isSignSubtask {
-		var executed bool
 		if !signRunMap[account.Filepath] {
 			allowedTasks := make(map[string]bool)
 			for _, qItem := range queue {
@@ -246,6 +269,8 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 				s := NewSign(c.root, c.l)
 				if err := s.RunSignForCookie(ctx, account.Filepath, account.IsMain, allowedTasks); err != nil {
 					c.cmd.Printf("[task] ❌ 账号 (%s) [日常签到] 执行失败: %s\n", account.Filepath, err)
+					c.root.ReportFailure(account.Filepath, "sign", err)
+					sessionInvalid = isSessionInvalidError(err)
 				} else {
 					c.cmd.Printf("[task] ✅ 账号 (%s) [日常签到] 执行完毕\n", account.Filepath)
 				}
@@ -254,7 +279,7 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 			}
 			signRunMap[account.Filepath] = true
 		}
-		return executed
+		return executed, sessionInvalid
 	}
 
 	if stdAction == "playids" {
@@ -262,11 +287,13 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 		p := NewPlayIds(c.root, c.l)
 		if err := p.RunForCookie(ctx, account.Filepath); err != nil {
 			c.cmd.Printf("[task] ❌ 账号 (%s) [播放指定歌曲] 执行失败: %s\n", account.Filepath, err)
+			c.root.ReportFailure(account.Filepath, "playids", err)
+			sessionInvalid = isSessionInvalidError(err)
 		} else {
 			c.cmd.Printf("[task] ✅ 账号 (%s) [播放指定歌曲] 执行完毕\n", account.Filepath)
 		}
 		c.sleepBetweenTasks(ctx)
-		return true
+		return true, sessionInvalid
 	}
 
 	if stdAction == "musician-sign" {
@@ -274,11 +301,13 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 		m := NewMusician(c.root, c.l)
 		if err := m.RunSignForCookie(ctx, account.Filepath); err != nil {
 			c.cmd.Printf("[task] ❌ 账号 (%s) [音乐人日常签到] 执行失败: %s\n", account.Filepath, err)
+			c.root.ReportFailure(account.Filepath, "musician-sign", err)
+			sessionInvalid = isSessionInvalidError(err)
 		} else {
 			c.cmd.Printf("[task] ✅ 账号 (%s) [音乐人日常签到] 执行完毕\n", account.Filepath)
 		}
 		c.sleepBetweenTasks(ctx)
-		return true
+		return true, sessionInvalid
 	}
 
 	if stdAction == "musician-vip" {
@@ -286,11 +315,13 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 		m := NewMusician(c.root, c.l)
 		if err := m.RunVipForCookie(ctx, account.Filepath); err != nil {
 			c.cmd.Printf("[task] ❌ 账号 (%s) [音乐人VIP进阶] 执行失败: %s\n", account.Filepath, err)
+			c.root.ReportFailure(account.Filepath, "musician-vip", err)
+			sessionInvalid = isSessionInvalidError(err)
 		} else {
 			c.cmd.Printf("[task] ✅ 账号 (%s) [音乐人VIP进阶] 执行完毕\n", account.Filepath)
 		}
 		c.sleepBetweenTasks(ctx)
-		return true
+		return true, sessionInvalid
 	}
 
 	if stdAction == "note" {
@@ -298,11 +329,13 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 		n := NewNote(c.root, c.l)
 		if _, err := n.ExecuteForCookie(ctx, account.Filepath); err != nil {
 			c.cmd.Printf("[task] ❌ 账号 (%s) [发布图文动态] 执行失败: %s\n", account.Filepath, err)
+			c.root.ReportFailure(account.Filepath, "note", err)
+			sessionInvalid = isSessionInvalidError(err)
 		} else {
 			c.cmd.Printf("[task] ✅ 账号 (%s) [发布图文动态] 执行完毕\n", account.Filepath)
 		}
 		c.sleepBetweenTasks(ctx)
-		return true
+		return true, sessionInvalid
 	}
 
 	if stdAction == "daily-song-share" {
@@ -311,19 +344,28 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 		cfg, err := d.getConfig()
 		if err != nil {
 			c.cmd.Printf("[task] account (%s) [daily song share] skipped: %s\n", account.Filepath, err)
-			return false
+			c.root.ReportSkip(account.Filepath, "daily-song-share", err.Error())
+			return false, false
 		}
 		if err := d.validatePrerequisites(cfg); err != nil {
 			c.cmd.Printf("[task] account (%s) [daily song share] skipped: %s\n", account.Filepath, err)
-			return false
+			c.root.ReportSkip(account.Filepath, "daily-song-share", err.Error())
+			return false, false
 		}
 		if _, err := d.ExecuteForCookie(ctx, account.Filepath); err != nil {
 			c.cmd.Printf("[task] account (%s) [daily song share] failed: %s\n", account.Filepath, err)
+			// missing token is operational skip rather than hard failure
+			if strings.Contains(err.Error(), "跳过") || strings.Contains(strings.ToLower(err.Error()), "skip") {
+				c.root.ReportSkip(account.Filepath, "daily-song-share", err.Error())
+			} else {
+				c.root.ReportFailure(account.Filepath, "daily-song-share", err)
+				sessionInvalid = isSessionInvalidError(err)
+			}
 		} else {
 			c.cmd.Printf("[task] account (%s) [daily song share] done\n", account.Filepath)
 		}
 		c.sleepBetweenTasks(ctx)
-		return true
+		return true, sessionInvalid
 	}
 
 	if stdAction == "vip-member-gift" {
@@ -332,19 +374,27 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 		cfg, err := v.getConfig()
 		if err != nil {
 			c.cmd.Printf("[task] account (%s) [vip member gift] skipped: %s\n", account.Filepath, err)
-			return false
+			c.root.ReportSkip(account.Filepath, "vip-member-gift", err.Error())
+			return false, false
 		}
 		if err := v.validateCommonPrerequisites(cfg); err != nil {
 			c.cmd.Printf("[task] account (%s) [vip member gift] skipped: %s\n", account.Filepath, err)
-			return false
+			c.root.ReportSkip(account.Filepath, "vip-member-gift", err.Error())
+			return false, false
 		}
 		if err := v.ExecuteForCookie(ctx, account.Filepath); err != nil {
 			c.cmd.Printf("[task] account (%s) [vip member gift] failed: %s\n", account.Filepath, err)
+			if strings.Contains(err.Error(), "跳过") || strings.Contains(strings.ToLower(err.Error()), "skip") {
+				c.root.ReportSkip(account.Filepath, "vip-member-gift", err.Error())
+			} else {
+				c.root.ReportFailure(account.Filepath, "vip-member-gift", err)
+				sessionInvalid = isSessionInvalidError(err)
+			}
 		} else {
 			c.cmd.Printf("[task] account (%s) [vip member gift] done\n", account.Filepath)
 		}
 		c.sleepBetweenTasks(ctx)
-		return true
+		return true, sessionInvalid
 	}
 
 	if stdAction == "fansgroup" {
@@ -352,22 +402,37 @@ func (c *Task) executeAction(ctx context.Context, stdAction string, account Acco
 		f := NewFansGroup(c.root, c.l)
 		if err := f.ExecuteForCookie(ctx, account.Filepath); err != nil {
 			c.cmd.Printf("[task] ❌ 账号 (%s) [乐迷团任务] 执行失败: %s\n", account.Filepath, err)
+			c.root.ReportFailure(account.Filepath, "fansgroup", err)
+			sessionInvalid = isSessionInvalidError(err)
 		} else {
 			c.cmd.Printf("[task] ✅ 账号 (%s) [乐迷团任务] 执行完毕\n", account.Filepath)
 		}
 		c.sleepBetweenTasks(ctx)
-		return true
+		return true, sessionInvalid
 	}
-	return false
+	return false, false
 }
 
-func (c *Task) runQueue(ctx context.Context, queue []string, accounts []Account, activeTasks map[string]bool) bool {
+// runQueue executes a task queue. invalidSessions is shared across fast/slow queues for the whole run.
+func (c *Task) runQueue(ctx context.Context, queue []string, accounts []Account, activeTasks map[string]bool, invalidSessions map[string]bool) bool {
+	if invalidSessions == nil {
+		invalidSessions = make(map[string]bool)
+	}
 	signRunMap := make(map[string]bool)
 	var queueExecuted bool
 
 	for i, account := range accounts {
+		if invalidSessions[account.Filepath] {
+			c.cmd.Printf("[task] ⚠️ 账号 (%s) Cookie/会话已失效，跳过本队列全部任务\n", account.Filepath)
+			continue
+		}
+
 		var hasExecuted bool
 		for _, action := range queue {
+			if invalidSessions[account.Filepath] {
+				break
+			}
+
 			stdAction := c.standardizeActionKey(action)
 			if stdAction == "" {
 				continue
@@ -381,9 +446,15 @@ func (c *Task) runQueue(ctx context.Context, queue []string, accounts []Account,
 				continue
 			}
 
-			if c.executeAction(ctx, stdAction, account, queue, activeTasks, signRunMap) {
+			executed, sessionInvalid := c.executeAction(ctx, stdAction, account, queue, activeTasks, signRunMap)
+			if executed {
 				hasExecuted = true
 				queueExecuted = true
+			}
+			if sessionInvalid {
+				invalidSessions[account.Filepath] = true
+				c.cmd.Printf("[task] ⚠️ 账号 (%s) Cookie/会话已失效，跳过该账号后续任务\n", account.Filepath)
+				break
 			}
 		}
 		if hasExecuted && i < len(accounts)-1 {
@@ -478,17 +549,19 @@ func (c *Task) execute(ctx context.Context) error {
 
 	fastQueue := cfg.Task.FastTasks
 	slowQueue := cfg.Task.SlowTasks
+	// 整次 task 进程共享：同一账号 Cookie 失效后，快/慢任务组均不再继续执行该账号
+	invalidSessions := make(map[string]bool)
 
 	if mode == "by-task-group" {
 		if runFast {
 			c.cmd.Println("[task] >>>>>> 开始执行 [快任务组] (跨账号串行) <<<<<<")
-			c.runQueue(ctx, fastQueue, accounts, activeTasks)
+			c.runQueue(ctx, fastQueue, accounts, activeTasks, invalidSessions)
 			c.cmd.Printf("[task] >>>>>> [快任务组] 执行完毕 <<<<<<\n\n")
 		}
 
 		if runSlow {
 			c.cmd.Println("[task] >>>>>> 开始执行 [慢任务组] (跨账号串行) <<<<<<")
-			c.runQueue(ctx, slowQueue, accounts, activeTasks)
+			c.runQueue(ctx, slowQueue, accounts, activeTasks, invalidSessions)
 			c.cmd.Printf("[task] >>>>>> [慢任务组] 执行完毕 <<<<<<\n\n")
 		}
 	} else if mode == "by-account" {
@@ -497,13 +570,13 @@ func (c *Task) execute(ctx context.Context) error {
 			var hasExecuted bool
 			if runFast {
 				c.cmd.Println("  --- [快任务组] ---")
-				if c.runQueue(ctx, fastQueue, []Account{account}, activeTasks) {
+				if c.runQueue(ctx, fastQueue, []Account{account}, activeTasks, invalidSessions) {
 					hasExecuted = true
 				}
 			}
 			if runSlow {
 				c.cmd.Println("  --- [慢任务组] ---")
-				if c.runQueue(ctx, slowQueue, []Account{account}, activeTasks) {
+				if c.runQueue(ctx, slowQueue, []Account{account}, activeTasks, invalidSessions) {
 					hasExecuted = true
 				}
 			}

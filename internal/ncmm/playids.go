@@ -235,7 +235,9 @@ func (c *PlayIds) execute(ctx context.Context) error {
 		// 未指定参数，根据配置文件开关选取账号
 		cfg := c.root.Cfg
 		if cfg.Accounts == nil {
-			return fmt.Errorf("配置文件中缺少 accounts 账号节点")
+			err := fmt.Errorf("配置文件中缺少 accounts 账号节点")
+			c.root.ReportFailure("-", "playids", err)
+			return err
 		}
 		if cfg.PlayIds != nil && cfg.PlayIds.EnableMain && cfg.Accounts.Main != "" {
 			executeQueue = append(executeQueue, cfg.Accounts.Main)
@@ -259,6 +261,7 @@ func (c *PlayIds) execute(ctx context.Context) error {
 
 	if len(executeQueue) == 0 {
 		c.log("未启用或未配置任何账号执行模拟播放打卡，请检查 config.yaml")
+		c.root.ReportSkip("-", "playids", "未启用或未配置任何账号")
 		return nil
 	}
 
@@ -267,6 +270,7 @@ func (c *PlayIds) execute(ctx context.Context) error {
 		c.log(">>>>>> 开始为账号 (%s) 执行模拟播放 <<<<<<", cookieFile)
 		if _, err := c.executeForCookie(ctx, cookieFile, uniqueIds); err != nil {
 			c.log("[ERROR] 账号 (%s) 模拟播放失败: %s", cookieFile, err)
+			c.root.ReportFailure(cookieFile, "playids", err)
 		}
 		c.log("--------------------------------------------------\n")
 

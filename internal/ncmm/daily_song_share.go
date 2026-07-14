@@ -92,10 +92,12 @@ func (c *DailySongShare) getConfig() (*config.DailySongShareConf, error) {
 func (c *DailySongShare) execute(ctx context.Context) error {
 	cfg, err := c.getConfig()
 	if err != nil {
+		c.root.ReportFailure("-", "daily-song-share", err)
 		return err
 	}
 	if err := c.validatePrerequisites(cfg); err != nil {
 		c.cmd.Printf("[daily-song-share] skipped: %v\n", err)
+		c.root.ReportSkip("-", "daily-song-share", err.Error())
 		return nil
 	}
 
@@ -104,7 +106,9 @@ func (c *DailySongShare) execute(ctx context.Context) error {
 		queue = append(queue, c.opts.CookieFile)
 	} else {
 		if c.root.Cfg.Accounts == nil {
-			return fmt.Errorf("missing accounts section")
+			err := fmt.Errorf("missing accounts section")
+			c.root.ReportFailure("-", "daily-song-share", err)
+			return err
 		}
 		if cfg.EnableMain && c.root.Cfg.Accounts.Main != "" {
 			queue = append(queue, c.root.Cfg.Accounts.Main)
@@ -120,6 +124,7 @@ func (c *DailySongShare) execute(ctx context.Context) error {
 
 	if len(queue) == 0 {
 		c.cmd.Println("[daily-song-share] no available accounts, please check config.yaml")
+		c.root.ReportSkip("-", "daily-song-share", "no available accounts")
 		return nil
 	}
 
@@ -127,6 +132,11 @@ func (c *DailySongShare) execute(ctx context.Context) error {
 		c.cmd.Printf("[daily-song-share] start account (%s)\n", cookieFile)
 		if _, err := c.ExecuteForCookie(ctx, cookieFile); err != nil {
 			c.cmd.Printf("[daily-song-share] account failed (%s): %v\n", cookieFile, err)
+			if strings.Contains(err.Error(), "跳过") || strings.Contains(strings.ToLower(err.Error()), "skip") {
+				c.root.ReportSkip(cookieFile, "daily-song-share", err.Error())
+			} else {
+				c.root.ReportFailure(cookieFile, "daily-song-share", err)
+			}
 		}
 		c.cmd.Println("[daily-song-share] --------------------------------------------------")
 		if i < len(queue)-1 {

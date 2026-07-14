@@ -187,6 +187,23 @@ type UpdaterConf struct {
 	ProxyMirrors []string `json:"proxy_mirrors" yaml:"proxy_mirrors"`
 }
 
+// NotifyConf 通知策略配置（通道凭证在独立 notify.yaml 中，见 File）。
+type NotifyConf struct {
+	Enabled     bool   `json:"enabled" yaml:"enabled"`
+	OnSkip      *bool  `json:"on_skip" yaml:"on_skip"` // 是否推送 skip，默认 true
+	TitlePrefix string `json:"title_prefix" yaml:"title_prefix"`
+	Timeout     string `json:"timeout" yaml:"timeout"` // 单通道超时，如 10s
+	File        string `json:"file" yaml:"file"`       // 通道配置文件路径，默认 notify.yaml
+}
+
+// OnSkipEnabled 返回 skip 是否需要推送（默认 true）。
+func (n *NotifyConf) OnSkipEnabled() bool {
+	if n == nil || n.OnSkip == nil {
+		return true
+	}
+	return *n.OnSkip
+}
+
 type Config struct {
 	v              *viper.Viper
 	Version        string              `json:"version" yaml:"version"`
@@ -204,6 +221,7 @@ type Config struct {
 	VipMemberGift  *VipMemberGiftConf  `json:"vipMemberGift" yaml:"vipMemberGift"`
 	Task           *TaskConf           `json:"task" yaml:"task"`
 	Updater        *UpdaterConf        `json:"updater" yaml:"updater"`
+	Notify         *NotifyConf         `json:"notify" yaml:"notify"`
 }
 
 // MusicianConf 音乐人任务配置
@@ -419,6 +437,22 @@ func (c *Config) Validate() error {
 				"ListenIndie", "PlayDailyRecommend", "playids", "musician-vip",
 			}
 		}
+	}
+	if c.Notify == nil {
+		c.Notify = &NotifyConf{}
+	}
+	if c.Notify.OnSkip == nil {
+		onSkip := true
+		c.Notify.OnSkip = &onSkip
+	}
+	if strings.TrimSpace(c.Notify.TitlePrefix) == "" {
+		c.Notify.TitlePrefix = "ncmm"
+	}
+	if strings.TrimSpace(c.Notify.Timeout) == "" {
+		c.Notify.Timeout = "10s"
+	}
+	if strings.TrimSpace(c.Notify.File) == "" {
+		c.Notify.File = "notify.yaml"
 	}
 	return nil
 }

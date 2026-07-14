@@ -1,5 +1,5 @@
 # 配置文件版本
-version: 1.1.9
+version: 1.1.11
 
 # 顶级多账号管理
 accounts:
@@ -8,7 +8,7 @@ accounts:
   # 辅助账号 Cookie 列表
   secondary:
     - "./fan1.json"
-    - "./fan2.json"
+    - "./fan2.json" # 不要的账号可以删除或者前面加#注释
   # 每个 Cookie 对应的移动端 X-antiCheatToken（从各自的移动端抓包获取，每个设备/账号唯一）
   # 目前需要 antiCheatToken 的任务有：dailySongShare 和 vipMemberGift(领取)。
   # 同时需要移动端 Cookie 和匹配的移动端 UA。没有配置 token 的账号会自动跳过需要该 token 的任务。
@@ -17,31 +17,56 @@ accounts:
     "./cookie.json": ""
     # "./fan1.json": ""
 
+# ncmm task 批量任务执行配置总开关。
+# 若命令行没有指定任何具体任务(例如运行 ncmm task)，则会执行 task 中所有配置为 true 的任务。
+# 若命令行指定了任意具体任务(例如运行 ncmm task --sign --playids)，则仅会执行这些被命令行明确开启的任务，而忽略其他未指定的任务。
+task:
+  # 是否在批量执行中包含日常一键签到
+  sign: true
+  # 是否在批量执行中包含播放指定歌曲任务
+  playids: true
+  # 是否在批量执行中包含音乐人日常签到任务（每日）
+  musician-sign: true
+  # 是否在批量执行中包含音乐人VIP进阶任务（每月）
+  musician-vip: false
+  # 是否在批量执行中包含自动发布/删除图文笔记任务
+  note: false
+  # 是否开启每日分享歌曲并抽奖，需要填写antiCheatTokens
+  daily-song-share: true
+  # 是否开启赠送和领取VIP任务，需要填写antiCheatTokens
+  vip-member-gift: true
+  # 是否在批量执行中包含乐迷团任务
+  fansgroup: true
 
-# log 日志模块配置
-log:
-  # 应用名称
-  app: ncm
-  # 日志输出格式: text / json
-  format: text
-  # 日志级别: debug < info < warn < error
-  level: info
-  # 日志是否输出到标准输出 (控制台)
-  stdout: false
-  # 滚动日志配置
-  rotate:
-    # 日志文件保存路径
-    filename: "./log/ncm.log"
-    # 单个日志文件最大大小 (单位: MB)
-    maxsize: 100
-    # 日志文件保留天数
-    maxage: 7
-    # 日志文件保留最大数量
-    maxbackups: 3
-    # 日志打印是否使用本地时间
-    localtime: true
-    # 日志文件是否启用 gzip 压缩
-    compress: true
+  # 任务调度与队列配置
+  # 执行模式:
+  #   - "by-task-group": 跨账号分群组串行。所有账号跑完快任务，再开始跑慢任务。
+  #   - "by-account": 单账号自包容串行。每个账号执行完快任务和慢任务后，再轮到下一个账号。
+  mode: "by-task-group"
+
+  # 快任务列表。包含所有耗时秒级的常规打卡任务。正常不需要修改
+  fast_tasks:
+    - daily-song-share     # 每日推歌发布任务
+    - VipTask              # 黑胶 VIP 任务
+    - Reserve              # 预约领云贝
+    - ViewVipCenter        # 浏览会员中心
+    - LikeComment          # 点赞评论和动态
+    - FollowArtist         # 关注歌手
+    - LikeSong             # 红心歌曲
+    - CollectSong          # 收藏歌曲
+    - PublishNote          # 发布图文动态
+    - musician-sign        # 音乐人日常签到
+    - note                 # 自动发布/删除图文笔记任务
+    - vip-member-gift      # 黑胶会员赠送和领取任务（云端）
+    - fansgroup            # 乐迷团任务
+
+  # 慢任务列表。包含所有听歌、刷播放量等耗时数分钟到数十分钟的任务。
+  slow_tasks:
+    - ListenIndie          # 探索小众歌曲 (约7分钟)
+    - PlayDailyRecommend   # 日推歌曲播放 (约30~45分钟)
+    - playids              # 播放指定歌曲任务
+    - musician-vip         # 音乐人VIP进阶任务 (含播放任务)
+
 
 # 网络模块配置
 network:
@@ -62,12 +87,7 @@ network:
     # XEAPI/AEAPI Android 移动客户端 User-Agent。Android 每日推歌、Android vipMemberGift 需要填写抓包移动端 UA。
     xeapi: ""
 
-# 数据缓存配置 (主要记录播放状态进度)
-database:
-  # 缓存驱动，目前仅支持 badger
-  driver: badger
-  # 缓存目录路径
-  path: "./database/badger/"
+
 
 # playids 播放指定歌曲配置
 playids:
@@ -91,7 +111,7 @@ playids:
   # 示例 (多源配置):
   idsFile:
     - "https://mum.cc.cd/34p793j2"
-    # - "local/ids.txt"
+    # - "./ids.txt"
   # 播放账号控制（命令行参数未指定 --cookie-file 时生效）
 
 # 签到任务配置
@@ -260,55 +280,7 @@ fansgroup:
   # 乐迷团发布笔记后是否自动删除（留空则继承 note.autoDelete 配置）
   # autoDeleteNote: true
 
-# 批量任务执行配置
-# 若命令行没有指定任何具体任务(例如运行 ncmm task)，则会执行 task 中所有配置为 true 的任务。
-# 若命令行指定了任意具体任务(例如运行 ncmm task --sign --playids)，则仅会执行这些被命令行明确开启的任务，而忽略其他未指定的任务。
-task:
-  # 是否在批量执行中包含日常一键签到
-  sign: true
-  # 是否在批量执行中包含播放指定歌曲任务
-  playids: true
-  # 是否在批量执行中包含音乐人日常签到任务（每日）
-  musician-sign: true
-  # 是否在批量执行中包含音乐人VIP进阶任务（每月）
-  musician-vip: false
-  # 是否在批量执行中包含自动发布/删除图文笔记任务
-  note: false
-  # 是否开启每日分享歌曲并抽奖，需要填写antiCheatTokens
-  daily-song-share: true
-  # 是否开启赠送和领取VIP任务，需要填写antiCheatTokens
-  vip-member-gift: true
-  # 是否在批量执行中包含乐迷团任务
-  fansgroup: true
 
-  # 任务调度与队列配置
-  # 执行模式:
-  #   - "by-task-group": 跨账号分群组串行。所有账号跑完快任务，再开始跑慢任务。
-  #   - "by-account": 单账号自包容串行。每个账号执行完快任务和慢任务后，再轮到下一个账号。
-  mode: "by-task-group"
-
-  # 快任务列表。包含所有耗时秒级的常规打卡任务。
-  fast_tasks:
-    - daily-song-share     # 每日推歌发布任务
-    - VipTask              # 黑胶 VIP 任务
-    - Reserve              # 预约领云贝
-    - ViewVipCenter        # 浏览会员中心
-    - LikeComment          # 点赞评论和动态
-    - FollowArtist         # 关注歌手
-    - LikeSong             # 红心歌曲
-    - CollectSong          # 收藏歌曲
-    - PublishNote          # 发布图文动态
-    - musician-sign        # 音乐人日常签到
-    - note                 # 自动发布/删除图文笔记任务
-    - vip-member-gift      # 黑胶会员赠送和领取任务（云端）
-    - fansgroup            # 乐迷团任务
-
-  # 慢任务列表。包含所有听歌、刷播放量等耗时数分钟到数十分钟的任务。
-  slow_tasks:
-    - ListenIndie          # 探索小众歌曲 (约7分钟)
-    - PlayDailyRecommend   # 日推歌曲播放 (约30~45分钟)
-    - playids              # 播放指定歌曲任务
-    - musician-vip         # 音乐人VIP进阶任务 (含播放任务)
 
 # 自动更新与版本检测配置
 updater:
@@ -322,3 +294,50 @@ updater:
     - "https://gh-proxy.com/"
     - "https://ghproxy.net/"
     - "https://githubproxy.cc/"
+
+# 运行失败通知（策略在此；通道凭证见独立文件 notify.yaml）
+# 仅在有失败或（on_skip=true 时的）跳过时，于进程结束汇总推送一条消息；成功不推送。
+notify:
+  # 总开关，默认关闭
+  enabled: false
+  # 任务被跳过（如缺 antiCheatToken）时是否纳入汇总推送，默认关闭
+  on_skip: false
+  # 推送标题前缀，便于多机区分
+  title_prefix: "ncmm"
+  # 单通道请求超时
+  timeout: 10s
+  # 通道配置文件路径（相对路径相对于 config.yaml 所在目录；无自定义 config 时相对 --home）
+  file: "notify.yaml"
+
+# log 日志模块配置
+log:
+  # 应用名称
+  app: ncm
+  # 日志输出格式: text / json
+  format: text
+  # 日志级别: debug < info < warn < error
+  level: info
+  # 日志是否输出到标准输出 (控制台)
+  stdout: false
+  # 滚动日志配置
+  rotate:
+    # 日志文件保存路径
+    filename: "./log/ncm.log"
+    # 单个日志文件最大大小 (单位: MB)
+    maxsize: 100
+    # 日志文件保留天数
+    maxage: 7
+    # 日志文件保留最大数量
+    maxbackups: 3
+    # 日志打印是否使用本地时间
+    localtime: true
+    # 日志文件是否启用 gzip 压缩
+    compress: true
+
+
+# 数据缓存配置 (主要记录播放状态进度)
+database:
+  # 缓存驱动，目前仅支持 badger
+  driver: badger
+  # 缓存目录路径
+  path: "./database/badger/"
