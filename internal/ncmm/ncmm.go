@@ -5,6 +5,7 @@ package ncmm
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,6 +31,7 @@ type Root struct {
 	Opts       RootOpts
 	cmd        *cobra.Command
 	l          *log.Logger
+	cmdOut     io.Writer
 	AppVersion string
 }
 
@@ -98,11 +100,18 @@ func New() *Root {
 		log.Default = c.l
 		log.Debug("[config] init home=%s path=%s log=%+v network=%+v", home, cfgPath, c.Cfg.Log, c.Cfg.Network)
 
+		c.cmdOut = log.LineWriter()
+		c.cmd.SetOut(io.MultiWriter(os.Stdout, c.cmdOut))
+		c.cmd.SetErr(io.MultiWriter(os.Stderr, c.cmdOut))
+
 		c.CheckForUpdatesPreRun()
 		return nil
 	}
 	c.cmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
 		c.ShowUpdateNotificationPostRun()
+		if f, ok := c.cmdOut.(interface{ Flush() }); ok {
+			f.Flush()
+		}
 		return c.l.Close()
 	}
 

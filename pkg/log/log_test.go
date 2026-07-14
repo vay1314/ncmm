@@ -22,3 +22,24 @@ func TestPrint(t *testing.T) {
 	Info("can not print")
 	Fatal("hello fatal")
 }
+
+func TestLineWriter(t *testing.T) {
+	Default = New(&Config{
+		App:    "test",
+		Format: "text",
+		Level:  "info",
+		Stdout: false,
+		Rotate: defaultConfig.Rotate,
+	})
+	w := LineWriter().(*lineWriter)
+	if _, err := w.Write([]byte("[sign] hello\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if _, err := w.Write([]byte("[sign] partial")); err != nil {
+		t.Fatalf("Write partial: %v", err)
+	}
+	w.Flush()
+	if len(w.buf) != 0 {
+		t.Fatalf("expected empty buffer after Flush, got %q", w.buf)
+	}
+}

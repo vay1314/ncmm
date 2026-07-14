@@ -4,12 +4,15 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"runtime"
+	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -175,4 +178,45 @@ func ErrorW(msg string, args ...any) {
 func FatalW(msg string, args ...any) {
 	log(Default.l.Handler(), slog.LevelError, msg, args...)
 	os.Exit(1)
+}
+
+func LineWriter() io.Writer {
+	return &lineWriter{}
+}
+
+type lineWriter struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := strings.TrimRight(string(w.buf[:i]), "\r")
+		w.buf = append([]byte(nil), w.buf[i+1:]...)
+		if strings.TrimSpace(line) != "" {
+			Info("%s", line)
+		}
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.buf) == 0 {
+		return
+	}
+	line := strings.TrimRight(string(w.buf), "\r")
+	w.buf = nil
+	if strings.TrimSpace(line) != "" {
+		Info("%s", line)
+	}
 }
