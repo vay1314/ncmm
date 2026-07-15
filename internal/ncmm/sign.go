@@ -84,12 +84,16 @@ func (c *SignIn) sleepBetweenAccounts(ctx context.Context, currentAccount string
 
 func (c *SignIn) execute(ctx context.Context) error {
 	if err := c.validate(); err != nil {
-		return fmt.Errorf("validate: %w", err)
+		err = fmt.Errorf("validate: %w", err)
+		c.root.ReportFailure("-", "sign", err)
+		return err
 	}
 
 	cfg := c.root.Cfg
 	if cfg.Accounts == nil {
-		return fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		err := fmt.Errorf("配置文件中缺少 accounts 账号节点")
+		c.root.ReportFailure("-", "sign", err)
+		return err
 	}
 
 	var activeAccounts []struct {
@@ -136,11 +140,13 @@ func (c *SignIn) execute(ctx context.Context) error {
 			c.cmd.Printf("[sign] >>>>>> 开始主账号签到 (%s) <<<<<<\n", acc.Filepath)
 			if err := c.RunSignForCookie(ctx, acc.Filepath, true, nil); err != nil {
 				c.cmd.Printf("[sign] ❌ 主账号签到失败: %s\n", err)
+				c.root.ReportFailure(acc.Filepath, "sign", err)
 			}
 		} else {
 			c.cmd.Printf("[sign] >>>>>> 开始辅助账号签到 (%s) <<<<<<\n", acc.Filepath)
 			if err := c.RunSignForCookie(ctx, acc.Filepath, false, nil); err != nil {
 				c.cmd.Printf("[sign] ❌ 辅助账号签到失败: %s\n", err)
+				c.root.ReportFailure(acc.Filepath, "sign", err)
 			}
 		}
 

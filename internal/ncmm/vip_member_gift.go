@@ -142,14 +142,17 @@ func (c *VipMemberGift) getConfig() (*config.VipMemberGiftConf, error) {
 func (c *VipMemberGift) execute(ctx context.Context) error {
 	cfg, err := c.getConfig()
 	if err != nil {
+		c.root.ReportFailure("-", "vip-member-gift", err)
 		return err
 	}
 	if !cfg.EnableGift && !cfg.EnableClaim {
 		c.cmd.Println("[vip-member-gift] skipped: enableGift and enableClaim are both false")
+		c.root.ReportSkip("-", "vip-member-gift", "enableGift and enableClaim are both false")
 		return nil
 	}
 	if err := c.validateCommonPrerequisites(cfg); err != nil {
 		c.cmd.Printf("[vip-member-gift] skipped: %v\n", err)
+		c.root.ReportSkip("-", "vip-member-gift", err.Error())
 		return nil
 	}
 
@@ -159,6 +162,7 @@ func (c *VipMemberGift) execute(ctx context.Context) error {
 	} else {
 		if c.root.Cfg.Accounts == nil {
 			c.cmd.Println("[vip-member-gift] no accounts configured, please check config.yaml")
+			c.root.ReportSkip("-", "vip-member-gift", "no accounts configured")
 			return nil
 		}
 		if cfg.EnableMain && c.root.Cfg.Accounts.Main != "" {
@@ -175,6 +179,7 @@ func (c *VipMemberGift) execute(ctx context.Context) error {
 
 	if len(queue) == 0 {
 		c.cmd.Println("[vip-member-gift] no available accounts, please check config.yaml")
+		c.root.ReportSkip("-", "vip-member-gift", "no available accounts")
 		return nil
 	}
 
@@ -182,6 +187,11 @@ func (c *VipMemberGift) execute(ctx context.Context) error {
 		c.cmd.Printf("[vip-member-gift] start account (%s)\n", cookieFile)
 		if err := c.ExecuteForCookie(ctx, cookieFile); err != nil {
 			c.cmd.Printf("[vip-member-gift] account failed (%s): %v\n", cookieFile, err)
+			if strings.Contains(err.Error(), "跳过") || strings.Contains(strings.ToLower(err.Error()), "skip") {
+				c.root.ReportSkip(cookieFile, "vip-member-gift", err.Error())
+			} else {
+				c.root.ReportFailure(cookieFile, "vip-member-gift", err)
+			}
 		}
 		c.cmd.Println("[vip-member-gift] --------------------------------------------------")
 		if i < len(queue)-1 {

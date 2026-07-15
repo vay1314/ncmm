@@ -9,6 +9,12 @@ if [ ! -f /data/config.yaml ]; then
   cp /etc/ncmm/config.yaml /data/config.yaml
 fi
 
+if [ ! -f /data/notify.yaml ]; then
+  echo "Initializing default notify.yaml..."
+  mkdir -p /data
+  cp /etc/ncmm/notify.yaml /data/notify.yaml
+fi
+
 # 2. 解析环境变量中的多重定时任务
 # 清空已有的 crontab，防止重复追加
 true > /etc/crontabs/root

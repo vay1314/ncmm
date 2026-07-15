@@ -24,6 +24,7 @@ COPY --from=builder /ncmm /usr/local/bin/ncmm
 
 # 复制默认配置模板作为系统备份
 COPY config/config.yaml /etc/ncmm/config.yaml
+COPY config/notify.yaml /etc/ncmm/notify.yaml
 
 # 复制并配置入口脚本
 COPY entrypoint.sh /entrypoint.sh

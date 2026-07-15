@@ -249,3 +249,18 @@ musician:
     # 两首歌曲之间的最大随机等待间隔（秒，为 0 则继承 playids.gap_max）
     gap_max: 0
 ```
+
+## 失败通知
+
+运行失败汇总推送说明见 [notify.md](notify.md)。
+
+`config.yaml` 中仅配置策略（通道凭证放独立文件 `notify.yaml`，示例见仓库 `config/notify.yaml`）：
+
+```yaml
+notify:
+  enabled: false      # 总开关，默认关闭
+  on_skip: false       # 跳过是否纳入汇总推送，默认 false
+  title_prefix: "ncmm"
+  timeout: 10s
+  file: "notify.yaml" # 相对路径相对于 config.yaml 所在目录
+```
